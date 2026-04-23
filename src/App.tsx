@@ -1,21 +1,15 @@
 /**
- * Magische Spiegel — Verjaardagsspiegel voor Kinderen
- * Efteling / Anton Piek stijl  ·  v9
- * Wijzigingen v5:
- *  - OrnateFrame vervangen door rozenkrans: groene rank, rozen in bloei, knoppen en bladeren langs ellips
- * Wijzigingen v4:
- *  - Vriendelijkere foutmelding: "De spiegel kan nu niet antwoorden. Het is druk op de server. Probeer het later opnieuw!"
- *  - Foutmelding wordt automatisch voorgelezen
- *  - Opnieuw-knop verschijnt bij fout zodat kind weet wat te doen
+ * Lo Specchio delle Fate — De Feeënspie­gel
+ * Italiaanse verjaardagsspiegel · Renaissance goud · v1
+ * Tweetalig: Italiaans + Nederlands
+ * Stijl: Renaissance architectuur — festoenen, lauwerkrans, acanthus, medaillons
  */
 import { useState, useRef, useEffect } from 'react';
 import { Key } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-// ── API sleutel: Vercel env variabele heeft voorrang ──────────────────────
 const ENV_KEY = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_ANTHROPIC_KEY) || '';
 
-// ── Retry helper ──────────────────────────────────────────────────────────
 const sleep = (ms) => new Promise(res => setTimeout(res, ms));
 
 async function fetchWithRetry(fn, maxAttempts = 3) {
@@ -37,7 +31,7 @@ async function fetchWithRetry(fn, maxAttempts = 3) {
   }
 }
 
-// ── Browser TTS met stemkeuze en failsafe ────────────────────────────────
+// ── TTS: Italiaans of Nederlands stem ────────────────────────────────────
 const getVoices = () => new Promise(resolve => {
   const v = window.speechSynthesis.getVoices();
   if (v.length) { resolve(v); return; }
@@ -45,265 +39,298 @@ const getVoices = () => new Promise(resolve => {
   setTimeout(() => resolve(window.speechSynthesis.getVoices()), 1500);
 });
 
-async function speakWithFallback(text, langCode = 'nl', onEnd = () => {}) {
+async function speakWithFallback(text, lang = 'it', onEnd = () => {}) {
   if (!text) { onEnd(); return; }
   window.speechSynthesis.cancel();
   const voices = await getVoices();
-  const pick = voices.find(v => v.lang.startsWith(langCode) && /female|woman|vrouw/i.test(v.name))
-    || voices.find(v => v.lang.startsWith(langCode))
-    || voices.find(v => v.lang.startsWith('nl'))
+  const bcp = lang === 'it' ? 'it-IT' : 'nl-NL';
+  const pick = voices.find(v => v.lang.startsWith(lang) && /female|woman|donna/i.test(v.name))
+    || voices.find(v => v.lang.startsWith(lang))
+    || voices.find(v => v.lang === bcp)
     || voices[0];
   const utt = new SpeechSynthesisUtterance(text);
   if (pick) utt.voice = pick;
-  utt.lang = { nl:'nl-NL', en:'en-GB', fr:'fr-FR', de:'de-DE' }[langCode] || 'nl-NL';
-  utt.rate = 0.88; utt.pitch = 1.1;
+  utt.lang = bcp;
+  utt.rate = 0.85; utt.pitch = 1.08;
   utt.onend = onEnd; utt.onerror = onEnd;
   window.speechSynthesis.speak(utt);
-  // Failsafe: sommige browsers vuren onend nooit
-  setTimeout(() => { try { window.speechSynthesis.cancel(); } catch {} }, text.length * 70 + 3000);
+  setTimeout(() => { try { window.speechSynthesis.cancel(); } catch {} }, text.length * 70 + 3500);
 }
 
-// ── speakAll: spreek boodschap voor, dan elk feitje met jaar ─────────────
-// Keten: boodschap → korte pauze → "En wist je dat..." → feit 1 → feit 2 → feit 3 → onEnd
-async function speakAll(boodschap, facts, langCode = 'nl', onEnd = () => {}) {
+async function speakAll(boodschap, facts, lang = 'it', onEnd = () => {}) {
   if (!boodschap) { onEnd(); return; }
-
-  // Bouw de feitjes-tekst als één aaneengesloten verhaal
-  const maanden = ['januari','februari','maart','april','mei','juni',
-    'juli','augustus','september','oktober','november','december'];
-
+  const mesiIT = ['gennaio','febbraio','marzo','aprile','maggio','giugno',
+    'luglio','agosto','settembre','ottobre','novembre','dicembre'];
+  const intro = lang === 'it'
+    ? 'E sapevi che in questo giorno sono accadute cose meravigliose? '
+    : 'En wist je dat er op jouw verjaardag ook bijzondere dingen zijn gebeurd? ';
   const feitjesTekst = facts.length > 0
-    ? 'En wist je dat er op jouw verjaardag ook bijzondere dingen zijn gebeurd? '
-      + facts.map(f => `In het jaar ${f.year}: ${f[langCode] || f.nl}`).join('. ') + '.'
+    ? intro + facts.map(f => `Nel ${f.year}: ${f[lang] || f.it}`).join('. ') + '.'
     : '';
-
-  const volledigeTekst = feitjesTekst
-    ? `${boodschap} ${feitjesTekst}`
-    : boodschap;
-
-  speakWithFallback(volledigeTekst, langCode, onEnd);
+  speakWithFallback(feitjesTekst ? `${boodschap} ${feitjesTekst}` : boodschap, lang, onEnd);
 }
-
 
 const STEP = { NAME: 'name', DATE: 'date', DONE: 'done' };
-const LANG_LABELS = { nl: '🇳🇱 NL', en: '🇬🇧 EN', fr: '🇫🇷 FR', de: '🇩🇪 DE' };
-const LANG_CODE   = { nl: 'nl', en: 'en', fr: 'fr', de: 'de' };
 
-const SPOKEN_Q = {
-  name: 'Ik ben de Magische Spiegel. Vertel mij eens, hoe heet jij?',
-  date: (name) => `Fijn om je te ontmoeten, ${name}! Wanneer ben jij geboren? Zeg of typ je verjaardag.`,
+// ── Vragen tweetalig ──────────────────────────────────────────────────────
+const Q = {
+  name_it: 'Sono lo Specchio delle Fate. Come ti chiami, piccolo/a?',
+  name_nl: 'Ik ben de Feeënspie­gel. Hoe heet jij, kleine vriend?',
+  date_it: (n) => `Piacere di conoscerti, ${n}! Quando sei nato/a? Di' o scrivi il tuo compleanno.`,
+  date_nl: (n) => `Fijn om je te ontmoeten, ${n}! Wanneer ben jij geboren?`,
 };
 
-// ── Prompt ────────────────────────────────────────────────────────────────
+// ── Prompt — Italiaans én Nederlands ─────────────────────────────────────
 const buildPrompt = (name, day, month, daysUntil) => {
+  const mese = ['gennaio','febbraio','marzo','aprile','maggio','giugno',
+    'luglio','agosto','settembre','ottobre','novembre','dicembre'][month - 1];
   const maand = ['januari','februari','maart','april','mei','juni',
     'juli','augustus','september','oktober','november','december'][month - 1];
-  let timing = '';
-  if (daysUntil === 0)               timing = 'VANDAAG is de verjaardag!';
-  else if (daysUntil > 0 && daysUntil <= 7)  timing = `Over ${daysUntil} dag${daysUntil===1?'':'en'} is de verjaardag.`;
-  else if (daysUntil < 0 && daysUntil >= -7) timing = `De verjaardag was ${Math.abs(daysUntil)} dag${Math.abs(daysUntil)===1?'':'en'} geleden.`;
+  let timing_it = '', timing_nl = '';
+  if (daysUntil === 0) {
+    timing_it = 'OGGI è il compleanno!';
+    timing_nl = 'VANDAAG is de verjaardag!';
+  } else if (daysUntil > 0 && daysUntil <= 7) {
+    timing_it = `Fra ${daysUntil} giorn${daysUntil===1?'o':'i'} è il compleanno.`;
+    timing_nl = `Over ${daysUntil} dag${daysUntil===1?'':'en'} is de verjaardag.`;
+  } else if (daysUntil < 0 && daysUntil >= -7) {
+    timing_it = `Il compleanno era ${Math.abs(daysUntil)} giorn${Math.abs(daysUntil)===1?'o':'i'} fa.`;
+    timing_nl = `De verjaardag was ${Math.abs(daysUntil)} dag${Math.abs(daysUntil)===1?'':'en'} geleden.`;
+  }
 
-  return `Je bent de Magische Spiegel uit een betoverd sprookjesbos. Spreek warm, vrolijk en kindvriendelijk.
+  return `Sei lo Specchio delle Fate, uno specchio magico di una foresta incantata italiana. Parla con calore, gioia e semplicità per i bambini. Usa uno stile poetico e fiabesco.
 
-Kind: ${name} | Verjaardag: ${day} ${maand} | ${timing}
+Bambino/a: ${name} | Compleanno: ${day} ${mese} | ${timing_it}
 
-Geef een persoonlijke verjaardagsboodschap (max 3 zinnen) én precies 2 of 3 echte historische feitjes van ${day} ${maand} die kinderen leuk vinden (artiesten, dieren, speelgoed, pretparken, tekenfilms, uitvindingen).
+Dai un messaggio di auguri personale (max 3 frasi) E esattamente 2 o 3 curiosità storiche vere del ${day} ${mese} che i bambini trovano affascinanti (animali, giocattoli, personaggi famosi, invenzioni, parchi divertimento, cartoni animati).
 
-Antwoord ALLEEN als JSON zonder markdown:
-{"nl":"...","en":"...","fr":"...","de":"...","facts":[{"year":1984,"nl":"...","en":"...","fr":"...","de":"..."}]}`;
+Rispondi SOLO come JSON senza markdown:
+{"it":"...","nl":"...","facts":[{"year":1984,"it":"...","nl":"..."}]}
+
+La versione "nl" è la traduzione olandese del messaggio di auguri. Scrivi in modo naturale, non letterale.`;
 };
 
-// ── Ornate spiegellijst SVG v7 — sprookjes emoji-krans ───────────────────
-// Emoji's als SVG <text> elementen langs een golvende rank
-// De rank slingert organisch — afwisselend binnen/buiten de gouden ellips
-
-function ptOnEllipse(cx, cy, rx, ry, angleDeg) {
-  const a = (angleDeg - 90) * Math.PI / 180;
-  return [cx + rx * Math.cos(a), cy + ry * Math.sin(a)];
-}
-
-function OrnateFrame({ W = 270, H = 330 }) {
+// ── Renaissance Frame SVG ─────────────────────────────────────────────────
+// Architecturale festoen: Ionische voluten, acanthusblad, lauwerkrans, rozetten
+function RenaissanceFrame({ W = 280, H = 346 }) {
   const cx = W / 2, cy = H / 2;
-  const rx = cx - 10, ry = cy - 10;
+  const rx = cx - 14, ry = cy - 14;
 
-  // Krans-items: emoji langs de rand, met wisselende offset (binnen/buiten ellips)
-  // offset > 0 = buiten gouden rand (over de rand heen), < 0 = binnen
-  // fontSize bepaalt de grootte
-  const kransPunten = [
-    // Boven
-    { a:  0, emoji:'🌹', fs:22, off: 14, rot:  0 },
-    { a: 14, emoji:'🍀', fs:15, off:  4, rot: 20 },
-    { a: 25, emoji:'🌱', fs:13, off: -2, rot: 35 },
-    { a: 37, emoji:'🥀', fs:17, off:  8, rot: 50 },
-    { a: 50, emoji:'🍀', fs:14, off:  2, rot: 65 },
-    // Rechts boven
-    { a: 63, emoji:'🌸', fs:20, off: 12, rot: 80 },
-    { a: 76, emoji:'🌱', fs:12, off: -4, rot: 95 },
-    { a: 87, emoji:'🍀', fs:15, off:  5, rot:110 },
-    { a: 99, emoji:'🌹', fs:19, off: 11, rot:125 },
-    { a:111, emoji:'🌱', fs:12, off: -3, rot:140 },
-    // Rechts midden
-    { a:122, emoji:'🍀', fs:16, off:  6, rot:155 },
-    { a:134, emoji:'🥀', fs:18, off: 13, rot:170 },
-    { a:146, emoji:'🌱', fs:13, off: -2, rot:185 },
-    { a:157, emoji:'🌸', fs:20, off: 14, rot:200 },
-    { a:169, emoji:'🍀', fs:14, off:  3, rot:215 },
-    // Rechts onder
-    { a:180, emoji:'🌹', fs:21, off: 14, rot:180 },
-    { a:192, emoji:'🌱', fs:12, off: -4, rot:245 },
-    { a:204, emoji:'🍀', fs:15, off:  5, rot:260 },
-    // Onder
-    { a:216, emoji:'🥀', fs:18, off: 12, rot:200 },
-    { a:228, emoji:'🌱', fs:12, off: -3, rot:290 },
-    { a:239, emoji:'🌸', fs:21, off: 15, rot:185 },
-    { a:251, emoji:'🍀', fs:14, off:  4, rot:320 },
-    { a:263, emoji:'🌹', fs:19, off: 12, rot:195 },
-    // Links onder
-    { a:274, emoji:'🌱', fs:12, off: -4, rot:350 },
-    { a:286, emoji:'🍀', fs:15, off:  5, rot: 10 },
-    { a:298, emoji:'🌸', fs:20, off: 13, rot: 25 },
-    { a:309, emoji:'🌱', fs:12, off: -2, rot: 40 },
-    // Links midden
-    { a:320, emoji:'🥀', fs:17, off:  9, rot: 55 },
-    { a:332, emoji:'🍀', fs:14, off:  3, rot: 70 },
-    { a:344, emoji:'🌹', fs:20, off: 13, rot: -5 },
-    { a:356, emoji:'🌱', fs:12, off: -3, rot: 10 },
+  // Lauwer-emoji krans langs de ellips
+  const laurierPts = [
+    { a:  0,  emoji:'🏺', fs:20, off: 16 },
+    { a: 18,  emoji:'🌿', fs:16, off:  6 },
+    { a: 33,  emoji:'🍃', fs:13, off: -2 },
+    { a: 46,  emoji:'🌿', fs:15, off:  5 },
+    { a: 60,  emoji:'⚜️', fs:18, off: 14 },
+    { a: 74,  emoji:'🌿', fs:14, off:  4 },
+    { a: 87,  emoji:'🍃', fs:12, off: -3 },
+    { a:100,  emoji:'🌿', fs:15, off:  6 },
+    { a:113,  emoji:'🏺', fs:19, off: 15 },
+    { a:127,  emoji:'🍃', fs:12, off: -2 },
+    { a:140,  emoji:'🌿', fs:16, off:  5 },
+    { a:153,  emoji:'⚜️', fs:18, off: 13 },
+    { a:167,  emoji:'🌿', fs:14, off:  4 },
+    { a:180,  emoji:'🏺', fs:20, off: 16 },
+    { a:193,  emoji:'🍃', fs:12, off: -3 },
+    { a:207,  emoji:'🌿', fs:15, off:  5 },
+    { a:220,  emoji:'⚜️', fs:18, off: 13 },
+    { a:234,  emoji:'🌿', fs:14, off:  4 },
+    { a:247,  emoji:'🍃', fs:12, off: -2 },
+    { a:260,  emoji:'🌿', fs:15, off:  6 },
+    { a:273,  emoji:'🏺', fs:19, off: 15 },
+    { a:287,  emoji:'🍃', fs:12, off: -3 },
+    { a:300,  emoji:'🌿', fs:15, off:  5 },
+    { a:313,  emoji:'⚜️', fs:18, off: 14 },
+    { a:326,  emoji:'🌿', fs:14, off:  4 },
+    { a:340,  emoji:'🍃', fs:13, off: -2 },
+    { a:353,  emoji:'🌿', fs:16, off:  6 },
+  ];
+
+  function ptOn(angleDeg, offR = 0) {
+    const a = (angleDeg - 90) * Math.PI / 180;
+    return [cx + (rx + offR) * Math.cos(a), cy + (ry + offR) * Math.sin(a)];
+  }
+
+  // Festoen-pad: golvende rank langs ellips
+  const festoenPts = Array.from({ length: 73 }, (_, i) => {
+    const angle = i * 5;
+    const wave = Math.sin(i * 1.1) * 5;
+    const [x, y] = ptOn(angle, wave);
+    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ') + 'Z';
+
+  // Architecturale pilasterlijnen (verticale accenten)
+  const pilasters = [
+    { x: 14, y1: cy - ry + 20, y2: cy + ry - 20 },
+    { x: W - 14, y1: cy - ry + 20, y2: cy + ry - 20 },
   ];
 
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}
       style={{ position:'absolute', inset:0, pointerEvents:'none', zIndex:2 }}>
       <defs>
-        <linearGradient id="gG1" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%"   stopColor="#fff0a0"/>
-          <stop offset="25%"  stopColor="#d4a017"/>
-          <stop offset="55%"  stopColor="#b8860b"/>
-          <stop offset="80%"  stopColor="#f0c040"/>
-          <stop offset="100%" stopColor="#8B6914"/>
+        {/* Renaissance goud — diep en gelaagd */}
+        <linearGradient id="rG1" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%"   stopColor="#fff3b0"/>
+          <stop offset="20%"  stopColor="#c8960a"/>
+          <stop offset="50%"  stopColor="#8B5E00"/>
+          <stop offset="78%"  stopColor="#d4a520"/>
+          <stop offset="100%" stopColor="#6b4400"/>
         </linearGradient>
-        <linearGradient id="gG2" x1="100%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%"   stopColor="#ffe566"/>
-          <stop offset="50%"  stopColor="#c49a0c"/>
-          <stop offset="100%" stopColor="#f5e642"/>
+        <linearGradient id="rG2" x1="100%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%"   stopColor="#ffe98a"/>
+          <stop offset="45%"  stopColor="#b07a08"/>
+          <stop offset="100%" stopColor="#f0d060"/>
         </linearGradient>
-        <filter id="gGlow" x="-30%" y="-30%" width="160%" height="160%">
-          <feGaussianBlur stdDeviation="3.5" result="b"/>
+        <linearGradient id="rGlowGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%"   stopColor="#fff8d0" stopOpacity="0.9"/>
+          <stop offset="100%" stopColor="#c8820a" stopOpacity="0.6"/>
+        </linearGradient>
+        <radialGradient id="rMed" cx="50%" cy="50%" r="50%">
+          <stop offset="0%"   stopColor="#fff3b0"/>
+          <stop offset="40%"  stopColor="#d4a520"/>
+          <stop offset="100%" stopColor="#6b3c00"/>
+        </radialGradient>
+        <filter id="rGlow" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="4" result="b"/>
           <feComposite in="SourceGraphic" in2="b" operator="over"/>
         </filter>
-        <filter id="emojiShadow" x="-40%" y="-40%" width="180%" height="180%">
-          <feDropShadow dx="0" dy="1.5" stdDeviation="2" floodColor="#0a1a04" floodOpacity="0.55"/>
+        <filter id="leafShadow">
+          <feDropShadow dx="0" dy="1.5" stdDeviation="2.5" floodColor="#3a1a00" floodOpacity="0.6"/>
         </filter>
-        <filter id="roseShadow" x="-40%" y="-40%" width="180%" height="180%">
-          <feDropShadow dx="0" dy="2" stdDeviation="2.5" floodColor="#200010" floodOpacity="0.5"/>
+        <filter id="goldShadow">
+          <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#1a0800" floodOpacity="0.7"/>
         </filter>
       </defs>
 
-      {/* ── Groene slingerende rank-stengel (golvend bezier pad langs de ellips) ── */}
-      {/* We tekenen de rank als een reeks kleine Bezier-bogen die de ellips volgen
-          maar hier en daar wat naar binnen of buiten afwijken */}
-      {(() => {
-        // Bouw een golvend pad van ~72 punten
-        const pts = Array.from({ length: 73 }, (_, i) => {
-          const angle = i * 5; // 0..360
-          const wave = Math.sin(i * 0.9) * 6; // organische golf
-          const [x, y] = ptOnEllipse(cx, cy, rx + wave, ry + wave, angle);
-          return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
-        });
-        return (
-          <>
-            <path d={pts.join(' ') + 'Z'} fill="none"
-              stroke="#18420a" strokeWidth="5" opacity="0.6"/>
-            <path d={pts.join(' ') + 'Z'} fill="none"
-              stroke="#3d8e1e" strokeWidth="3" opacity="0.85"/>
-            <path d={pts.join(' ') + 'Z'} fill="none"
-              stroke="#7acc40" strokeWidth="1.2" opacity="0.28"
-              strokeDasharray="3 9"/>
-          </>
-        );
-      })()}
+      {/* ── Fresco-achtige achtergrond ring (subtiel) ── */}
+      <ellipse cx={cx} cy={cy} rx={rx+22} ry={ry+22}
+        fill="none" stroke="rgba(180,120,20,0.08)" strokeWidth="18"/>
 
-      {/* ── Gouden dubbele ellips OVER de rank ── */}
+      {/* ── Festoen rank (groen organisch) ── */}
+      <path d={festoenPts} fill="none"
+        stroke="#2d5a1a" strokeWidth="5.5" opacity="0.5"/>
+      <path d={festoenPts} fill="none"
+        stroke="#4a8a2a" strokeWidth="3" opacity="0.8"/>
+      <path d={festoenPts} fill="none"
+        stroke="#8dc45a" strokeWidth="1" opacity="0.22" strokeDasharray="4 10"/>
+
+      {/* ── Buitenste gouden ellips (breed, architecturaal) ── */}
       <ellipse cx={cx} cy={cy} rx={rx}    ry={ry}
-        fill="none" stroke="url(#gG1)" strokeWidth="5.5"/>
-      <ellipse cx={cx} cy={cy} rx={rx-8}  ry={ry-8}
-        fill="none" stroke="url(#gG2)" strokeWidth="1.6" opacity="0.6"/>
-      <ellipse cx={cx} cy={cy} rx={rx-13} ry={ry-13}
-        fill="none" stroke="#f5e642" strokeWidth="0.5" opacity="0.18"/>
+        fill="none" stroke="url(#rG1)" strokeWidth="7"/>
+      {/* Tweede binnenste ring */}
+      <ellipse cx={cx} cy={cy} rx={rx-10} ry={ry-10}
+        fill="none" stroke="url(#rG2)" strokeWidth="2.2" opacity="0.7"/>
+      {/* Derde fijne lijn */}
+      <ellipse cx={cx} cy={cy} rx={rx-16} ry={ry-16}
+        fill="none" stroke="#f0d060" strokeWidth="0.6" opacity="0.25"/>
 
-      {/* ── Emoji krans — laag 1: kleine groene elementen (achter goud) ── */}
-      {kransPunten.filter(p => ['🌱','🍀'].includes(p.emoji)).map((p, i) => {
-        const [px, py] = ptOnEllipse(cx, cy, rx + p.off, ry + p.off, p.a);
+      {/* ── Architecturale pilaster accenten (korte gouden strepen) ── */}
+      {[0, 90, 180, 270].map((deg, i) => {
+        const [px, py] = ptOn(deg, 0);
+        const [px2, py2] = ptOn(deg, -18);
         return (
-          <text key={`g${i}`}
-            x={px} y={py}
+          <line key={`pilA${i}`} x1={px} y1={py} x2={px2} y2={py2}
+            stroke="url(#rG1)" strokeWidth="3" opacity="0.6"/>
+        );
+      })}
+
+      {/* ── Lauwerkrans emoji langs de rand ── */}
+      {laurierPts.map((p, i) => {
+        const [px, py] = ptOn(p.a, p.off);
+        const rot = p.a - 90;
+        return (
+          <text key={`l${i}`} x={px} y={py}
             fontSize={p.fs}
             textAnchor="middle" dominantBaseline="middle"
-            transform={`rotate(${p.rot},${px},${py})`}
-            filter="url(#emojiShadow)"
+            transform={`rotate(${rot},${px},${py})`}
+            filter="url(#leafShadow)"
             style={{ userSelect:'none' }}>
             {p.emoji}
           </text>
         );
       })}
 
-      {/* ── Emoji krans — laag 2: bloemen (voor goud) ── */}
-      {kransPunten.filter(p => ['🌹','🥀','🌸'].includes(p.emoji)).map((p, i) => {
-        const [px, py] = ptOnEllipse(cx, cy, rx + p.off, ry + p.off, p.a);
-        return (
-          <text key={`f${i}`}
-            x={px} y={py}
-            fontSize={p.fs}
-            textAnchor="middle" dominantBaseline="middle"
-            transform={`rotate(${p.rot},${px},${py})`}
-            filter="url(#roseShadow)"
-            style={{ userSelect:'none' }}>
-            {p.emoji}
-          </text>
-        );
-      })}
-
-      {/* ── 🪞 Gouden medaillon bovenin ── */}
-      <circle cx={cx} cy={13} r={23} fill="url(#gG1)" filter="url(#gGlow)"/>
-      <circle cx={cx} cy={13} r={19} fill="#100802"/>
-      <circle cx={cx} cy={13} r={17} fill="url(#gG1)" opacity="0.08"/>
-      <text x={cx} y={20} textAnchor="middle" fontSize="18" style={{ userSelect:'none' }}>🪞</text>
-      <line x1={cx} y1={36} x2={cx} y2={cy-ry}
-        stroke="url(#gG1)" strokeWidth="2.5" opacity="0.75"/>
-      <circle cx={cx} cy={37} r={3.5} fill="url(#gG1)"/>
-
-      {/* ── Onderkant sierrand ── */}
-      <path d={`M${cx-42} ${H-18} Q${cx} ${H-4} ${cx+42} ${H-18}`}
-        fill="none" stroke="url(#gG1)" strokeWidth="2.5"/>
-      <circle cx={cx} cy={H-4} r={5} fill="url(#gG1)"/>
-      {[-24,24].map((dx, i) =>
-        <circle key={i} cx={cx+dx} cy={H-14} r={3} fill="#d4a017" opacity="0.72"/>)}
-
-      {/* ── Hoek-glinstertjes ── */}
+      {/* ── Rozet-medaillons op de vier kardinaalspunten ── */}
       {[
-        [cx, cy-ry-18], [cx, cy+ry+12],
-        [cx-rx-12, cy], [cx+rx+12, cy],
+        { deg: 0,   label:'✦' },
+        { deg: 90,  label:'✦' },
+        { deg: 180, label:'✦' },
+        { deg: 270, label:'✦' },
+      ].map(({ deg, label }, i) => {
+        const [mx, my] = ptOn(deg, 0);
+        return (
+          <g key={`med${i}`}>
+            <circle cx={mx} cy={my} r={10} fill="url(#rMed)" filter="url(#goldShadow)"/>
+            <circle cx={mx} cy={my} r={7} fill="#1a0600"/>
+            <text x={mx} y={my} textAnchor="middle" dominantBaseline="middle"
+              fontSize="8" fill="#f5d060" style={{ userSelect:'none' }}>{label}</text>
+          </g>
+        );
+      })}
+
+      {/* ── Bovenste timpaan: halfrond fronton ── */}
+      {/* Grote medaillon top */}
+      <circle cx={cx} cy={14} r={28} fill="url(#rG1)" filter="url(#rGlow)"/>
+      <circle cx={cx} cy={14} r={23} fill="#1a0800"/>
+      <circle cx={cx} cy={14} r={20} fill="url(#rG1)" opacity="0.06"/>
+      {/* Feeënspie­gel icoon */}
+      <text x={cx} y={22} textAnchor="middle" fontSize="22" style={{ userSelect:'none' }}>🪞</text>
+      {/* Verbindingslijn timpaan → ellips */}
+      <line x1={cx} y1={42} x2={cx} y2={cy - ry}
+        stroke="url(#rG1)" strokeWidth="3" opacity="0.8"/>
+      <circle cx={cx} cy={43} r={5} fill="url(#rMed)"/>
+
+      {/* ── Onderkant: console/cartouche ── */}
+      {/* Gewelfde boog */}
+      <path d={`M${cx-55} ${H-20} Q${cx-28} ${H-6} ${cx} ${H-3} Q${cx+28} ${H-6} ${cx+55} ${H-20}`}
+        fill="none" stroke="url(#rG1)" strokeWidth="3"/>
+      {/* Centrale medaillon onder */}
+      <circle cx={cx} cy={H-3} r={7} fill="url(#rMed)"/>
+      {/* Console-knopjes */}
+      {[-36, -18, 18, 36].map((dx, i) =>
+        <circle key={`cn${i}`} cx={cx + dx} cy={H - 16} r={i % 2 === 0 ? 4 : 2.5}
+          fill="#c8960a" opacity={i % 2 === 0 ? 0.85 : 0.5}/>
+      )}
+
+      {/* ── Hoekaccenten: Acanthus sterretjes ── */}
+      {[
+        [cx,      cy - ry - 20],
+        [cx,      cy + ry + 14],
+        [cx-rx-16, cy],
+        [cx+rx+16, cy],
       ].map(([ex, ey], i) => (
-        <text key={`sp${i}`} x={ex} y={ey}
+        <text key={`ac${i}`} x={ex} y={ey}
           textAnchor="middle" dominantBaseline="middle"
-          fontSize="10" opacity="0.55"
-          style={{ userSelect:'none' }}>✨</text>
+          fontSize="12" opacity="0.42" fill="#d4a520"
+          style={{ userSelect:'none' }}>✦</text>
       ))}
+
+      {/* ── Fijne goud-glans highlights langs ellips (arcjes) ── */}
+      {[30, 150, 210, 330].map((deg, i) => {
+        const [hx, hy] = ptOn(deg, -3);
+        return (
+          <circle key={`hl${i}`} cx={hx} cy={hy} r={2.5}
+            fill="#fff8c0" opacity="0.38"/>
+        );
+      })}
     </svg>
   );
 }
 
-// ── Vuurvliegjes ──────────────────────────────────────────────────────────
-const FIREFLIES = Array.from({ length: 16 }, (_, i) => ({
+// ── Vuurvliegjes / gouden stofjes ────────────────────────────────────────
+const FIREFLIES = Array.from({ length: 18 }, (_, i) => ({
   id: i, x: Math.random()*100, y: Math.random()*100,
-  delay: Math.random()*4, dur: 3 + Math.random()*3,
-  dx: (Math.random()-0.5)*60, dy: (Math.random()-0.5)*40,
+  delay: Math.random()*5, dur: 4 + Math.random()*4,
+  dx: (Math.random()-0.5)*70, dy: (Math.random()-0.5)*50,
+  color: ['#f5e642','#ffd090','#fff8c0','#e8b830'][i % 4],
 }));
 
-// ── Magische deeltjes (in spiegel na resultaat) ───────────────────────────
-const PARTICLES = Array.from({ length: 10 }, (_, i) => ({
-  id: i, x: 10+Math.random()*80, y: 10+Math.random()*80,
-  size: 4+Math.random()*7, delay: Math.random()*3, dur: 2+Math.random()*2,
-  color: ['#f5e642','#fff8c0','#ffb347','#ff9de2','#a8edea'][i%5],
+const PARTICLES = Array.from({ length: 12 }, (_, i) => ({
+  id: i, x: 8+Math.random()*84, y: 8+Math.random()*84,
+  size: 3+Math.random()*8, delay: Math.random()*3, dur: 2+Math.random()*2.5,
+  color: ['#f5e642','#fff8c0','#ffb347','#e8c84a','#ffd090'][i%5],
 }));
 
 // ── Setup overlay (in de spiegel) ─────────────────────────────────────────
@@ -314,161 +341,181 @@ function SetupOverlay({ step, name, setName, birthInput, setBirthInput,
 
   return (
     <motion.div key={step}
-      initial={{ opacity:0, scale:0.92 }} animate={{ opacity:1, scale:1 }}
-      exit={{ opacity:0, scale:0.92 }}
+      initial={{ opacity:0, scale:0.90 }} animate={{ opacity:1, scale:1 }}
+      exit={{ opacity:0, scale:0.90 }} transition={{ duration:0.4 }}
       style={{
         position:'absolute', inset:0,
         display:'flex', flexDirection:'column',
         alignItems:'center', justifyContent:'center',
-        padding:'16px 18px',
-        background:'rgba(14,7,28,0.94)',
+        padding:'14px 16px',
+        background:'rgba(18,6,2,0.93)',
         borderRadius:'50% 50% 47% 47%',
-        zIndex:10, gap:10,
+        zIndex:10, gap:9,
       }}
     >
-      <div style={{ fontSize:26 }}>{isName ? '👋' : '🎂'}</div>
+      <div style={{ fontSize:24 }}>🧚</div>
 
+      {/* Italiaans */}
       <p style={{
-        color:'#f5e642', fontSize:12, textAlign:'center', margin:0,
-        lineHeight:1.55, fontFamily:"'IM Fell English', serif",
-        textShadow:'0 0 10px rgba(245,230,66,0.48)',
+        color:'#f5d060', fontSize:11.5, textAlign:'center', margin:0,
+        lineHeight:1.5, fontFamily:"'Cinzel', serif",
+        textShadow:'0 0 12px rgba(245,208,96,0.5)',
+        letterSpacing:'0.03em',
       }}>
-        {isName
-          ? 'Ik ben de Magische Spiegel. Hoe heet jij?'
-          : `Wanneer ben jij geboren, ${name}?`}
+        {isName ? Q.name_it : Q.date_it(name)}
+      </p>
+
+      {/* Nederlands (kleiner, cursief) */}
+      <p style={{
+        color:'rgba(245,208,96,0.42)', fontSize:10, textAlign:'center', margin:0,
+        lineHeight:1.4, fontFamily:"'Cormorant Garamond', serif",
+        fontStyle:'italic',
+      }}>
+        {isName ? Q.name_nl : Q.date_nl(name)}
       </p>
 
       <input
         value={isName ? name : birthInput}
         onChange={e => isName ? setName(e.target.value) : setBirthInput(e.target.value)}
         onKeyDown={e => e.key === 'Enter' && onConfirm()}
-        placeholder={isName ? 'Typ je naam...' : '4 april of 15-04'}
-        inputMode={isName ? 'text' : 'numeric'}
+        placeholder={isName ? 'Scrivi il tuo nome...' : '4 aprile · 15-04'}
+        inputMode={isName ? 'text' : 'text'}
         autoFocus
         style={{
-          background:'rgba(245,230,66,0.07)',
-          border:'1px solid rgba(245,230,66,0.38)',
-          borderRadius:12, padding:'8px 12px',
-          color:'#f5e642', fontSize:15, textAlign:'center',
-          outline:'none', fontFamily:"'IM Fell English', serif",
-          width:'85%',
+          background:'rgba(245,208,96,0.06)',
+          border:'1px solid rgba(245,208,96,0.35)',
+          borderRadius:12, padding:'7px 12px',
+          color:'#f5d060', fontSize:14, textAlign:'center',
+          outline:'none', fontFamily:"'Cormorant Garamond', serif",
+          width:'86%', letterSpacing:'0.04em',
         }}
       />
 
       <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-        {/* Microfoon */}
-        <button
-          onClick={() => onListen(step)}
-          style={{
-            width:40, height:40, borderRadius:'50%',
-            background: isListening && listenTarget===step
-              ? 'rgba(200,50,50,0.85)' : 'rgba(245,230,66,0.11)',
-            border:'1.5px solid rgba(245,230,66,0.42)',
-            cursor:'pointer', fontSize:17,
-            display:'flex', alignItems:'center', justifyContent:'center',
-            transition:'all 0.2s',
-          }}
-          title="Spreek je antwoord in"
-        >
+        <button onClick={() => onListen(step)} style={{
+          width:38, height:38, borderRadius:'50%',
+          background: isListening && listenTarget===step
+            ? 'rgba(180,40,40,0.85)' : 'rgba(245,208,96,0.10)',
+          border:'1.5px solid rgba(245,208,96,0.38)',
+          cursor:'pointer', fontSize:16,
+          display:'flex', alignItems:'center', justifyContent:'center',
+          transition:'all 0.2s',
+        }}>
           {isListening && listenTarget===step ? '🔴' : '🎤'}
         </button>
 
-        {/* Submit / Verder */}
-        <button
-          onClick={onConfirm}
-          style={{
-            padding:'9px 20px', borderRadius:22,
-            background:'linear-gradient(135deg,#d4a017,#f5e642)',
-            border:'none', color:'#180c00',
-            fontWeight:700, fontSize:13, cursor:'pointer',
-            fontFamily:"'IM Fell English', serif",
-            boxShadow:'0 2px 14px rgba(212,160,23,0.52)',
-            letterSpacing:'0.04em',
-          }}
-        >
-          {isName ? 'Verder ✨' : 'Toon mijn boodschap 🪄'}
+        <button onClick={onConfirm} style={{
+          padding:'8px 18px', borderRadius:22,
+          background:'linear-gradient(135deg,#8B5E00,#d4a520,#f5d060,#d4a520,#8B5E00)',
+          backgroundSize:'200% auto',
+          border:'none', color:'#1a0800',
+          fontWeight:700, fontSize:12, cursor:'pointer',
+          fontFamily:"'Cinzel', serif",
+          boxShadow:'0 2px 14px rgba(180,130,20,0.5)',
+          letterSpacing:'0.06em',
+        }}>
+          {isName ? 'Avanti ✨' : 'Mostrami ✦'}
         </button>
       </div>
 
       {!isName && (
-        <p style={{ fontSize:9, color:'rgba(245,230,66,0.32)', margin:0, textAlign:'center' }}>
-          Bijv: 4 april · april 4 · 15-04
+        <p style={{ fontSize:9, color:'rgba(245,208,96,0.28)', margin:0, textAlign:'center',
+          fontFamily:"'Cormorant Garamond', serif" }}>
+          Es: 4 aprile · april 4 · 15-04
         </p>
       )}
     </motion.div>
   );
 }
 
-// ── Tekstballon ───────────────────────────────────────────────────────────
-function SpeechBubble({ message, lang, setLang, onSpeak }) {
+// ── Tekstballon — tweetalig IT + NL ──────────────────────────────────────
+function SpeechBubble({ message, onSpeak, speakLang, setSpeakLang }) {
   if (!message) return null;
-  const text = message[lang] || message.nl || '';
+  const textIT = message.it || '';
+  const textNL = message.nl || '';
   const facts = message.facts || [];
 
   return (
     <motion.div
-      initial={{ opacity:0, y:18, scale:0.95 }}
+      initial={{ opacity:0, y:16, scale:0.95 }}
       animate={{ opacity:1, y:0, scale:1 }}
       exit={{ opacity:0, y:-8 }}
       style={{
         width:'100%',
-        background:'linear-gradient(160deg,rgba(36,20,6,0.98),rgba(20,11,3,0.99))',
-        border:'2px solid rgba(212,160,23,0.52)',
-        borderRadius:18, padding:'13px 16px',
-        boxShadow:'0 8px 28px rgba(0,0,0,0.65),0 0 18px rgba(212,160,23,0.07)',
+        background:'linear-gradient(160deg,rgba(30,12,4,0.98),rgba(18,7,2,0.99))',
+        border:'2px solid rgba(180,130,20,0.55)',
+        borderRadius:18, padding:'13px 15px',
+        boxShadow:'0 8px 32px rgba(0,0,0,0.7),0 0 22px rgba(180,130,20,0.08)',
         position:'relative',
       }}
     >
-      {/* Pijltje */}
+      {/* Pijl omhoog */}
       <div style={{ position:'absolute', top:-12, left:'50%', transform:'translateX(-50%)',
         width:0, height:0, borderLeft:'9px solid transparent',
-        borderRight:'9px solid transparent', borderBottom:'12px solid rgba(212,160,23,0.52)' }}/>
+        borderRight:'9px solid transparent', borderBottom:'12px solid rgba(180,130,20,0.55)' }}/>
       <div style={{ position:'absolute', top:-9, left:'50%', transform:'translateX(-50%)',
         width:0, height:0, borderLeft:'7px solid transparent',
-        borderRight:'7px solid transparent', borderBottom:'10px solid rgba(36,20,6,0.98)' }}/>
+        borderRight:'7px solid transparent', borderBottom:'10px solid rgba(30,12,4,0.98)' }}/>
 
-      {/* Taalwisselaars + 🔊 */}
-      <div style={{ display:'flex', gap:4, marginBottom:10, flexWrap:'wrap', alignItems:'center' }}>
-        {Object.entries(LANG_LABELS).map(([l,lbl]) => (
-          <button key={l} onClick={() => setLang(l)} style={{
-            padding:'2px 8px', borderRadius:12, fontSize:10, cursor:'pointer',
-            transition:'all 0.2s',
-            background: lang===l ? 'rgba(212,160,23,0.26)' : 'transparent',
-            border:`1px solid ${lang===l ? 'rgba(212,160,23,0.78)' : 'rgba(212,160,23,0.18)'}`,
-            color: lang===l ? '#f5e642' : 'rgba(245,230,66,0.36)',
-          }}>{lbl}</button>
-        ))}
+      {/* 🔊 + taal toggle */}
+      <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:6, marginBottom:8 }}>
+        <button onClick={() => setSpeakLang(speakLang === 'it' ? 'nl' : 'it')} style={{
+          padding:'2px 8px', borderRadius:10, fontSize:9, cursor:'pointer',
+          background:'rgba(180,130,20,0.15)', border:'1px solid rgba(180,130,20,0.35)',
+          color:'rgba(245,208,96,0.7)', fontFamily:"'Cinzel', serif",
+          letterSpacing:'0.08em',
+        }}>
+          {speakLang === 'it' ? '🇮🇹 IT' : '🇳🇱 NL'}
+        </button>
         <button onClick={onSpeak} style={{
-          marginLeft:'auto', background:'none', border:'none',
-          cursor:'pointer', fontSize:16, opacity:0.54,
+          background:'none', border:'none', cursor:'pointer', fontSize:17, opacity:0.6,
         }}>🔊</button>
       </div>
 
-      {/* Boodschap */}
+      {/* Italiaanse boodschap */}
       <p style={{
-        margin:'0 0 10px', color:'#f5e642', lineHeight:1.7, fontSize:14,
-        fontFamily:"'IM Fell English', serif",
-        textShadow:'0 0 8px rgba(245,230,66,0.22)',
-      }}>✨ {text}</p>
+        margin:'0 0 6px', color:'#f5d060', lineHeight:1.72, fontSize:14,
+        fontFamily:"'Cormorant Garamond', serif",
+        textShadow:'0 0 10px rgba(245,208,96,0.2)',
+        fontStyle:'italic',
+      }}>✨ {textIT}</p>
 
-      {/* Feitjes */}
+      {/* Scheidingslijn */}
+      <div style={{ borderTop:'1px solid rgba(180,130,20,0.18)', margin:'8px 0' }}/>
+
+      {/* Nederlandse vertaling */}
+      <p style={{
+        margin:'0 0 10px', color:'rgba(245,208,96,0.52)', lineHeight:1.65, fontSize:12,
+        fontFamily:"'Cormorant Garamond', serif",
+      }}>🇳🇱 {textNL}</p>
+
+      {/* Historische feitjes */}
       {facts.length > 0 && (
-        <div style={{ borderTop:'1px solid rgba(212,160,23,0.16)', paddingTop:8,
+        <div style={{ borderTop:'1px solid rgba(180,130,20,0.14)', paddingTop:8,
           display:'flex', flexDirection:'column', gap:5 }}>
-          <p style={{ margin:0, fontSize:9, color:'rgba(212,160,23,0.46)',
-            letterSpacing:'0.14em', textTransform:'uppercase' }}>
-            ✦ Op jouw verjaardag in het verleden ✦
+          <p style={{ margin:0, fontSize:8.5, color:'rgba(180,130,20,0.5)',
+            letterSpacing:'0.16em', textTransform:'uppercase',
+            fontFamily:"'Cinzel', serif" }}>
+            ✦ Nel tuo giorno di nascita · Op jouw geboortedag ✦
           </p>
-          {facts.map((f,i) => (
+          {facts.map((f, i) => (
             <div key={i} style={{
-              background:'rgba(245,230,66,0.04)',
-              border:'1px solid rgba(212,160,23,0.12)',
+              background:'rgba(245,208,96,0.03)',
+              border:'1px solid rgba(180,130,20,0.12)',
               borderRadius:9, padding:'5px 10px',
             }}>
-              <span style={{ color:'#d4a017', fontSize:10, fontWeight:700 }}>{f.year} · </span>
-              <span style={{ color:'rgba(245,230,66,0.7)', fontSize:11, fontStyle:'italic' }}>
-                {f[lang] || f.nl}
+              <span style={{ color:'#c8960a', fontSize:10, fontWeight:700,
+                fontFamily:"'Cinzel', serif" }}>{f.year} · </span>
+              <span style={{ color:'rgba(245,208,96,0.72)', fontSize:11,
+                fontFamily:"'Cormorant Garamond', serif", fontStyle:'italic' }}>
+                {f.it}
               </span>
+              {f.nl && f.nl !== f.it && (
+                <span style={{ display:'block', color:'rgba(245,208,96,0.36)', fontSize:10,
+                  fontFamily:"'Cormorant Garamond', serif", marginTop:2 }}>
+                  🇳🇱 {f.nl}
+                </span>
+              )}
             </div>
           ))}
         </div>
@@ -478,12 +525,12 @@ function SpeechBubble({ message, lang, setLang, onSpeak }) {
 }
 
 // ── Hoofd component ───────────────────────────────────────────────────────
-export default function MagischeSpiegel() {
+export default function SpecchioFate() {
   const [step, setStep]               = useState(STEP.NAME);
   const [name, setName]               = useState('');
   const [birthInput, setBirthInput]   = useState('');
   const [message, setMessage]         = useState(null);
-  const [lang, setLang]               = useState('nl');
+  const [speakLang, setSpeakLang]     = useState('it');
   const [status, setStatus]           = useState('');
   const [isListening, setIsListening] = useState(false);
   const [listenTarget, setListenTarget] = useState(null);
@@ -491,17 +538,15 @@ export default function MagischeSpiegel() {
   const [isSpeaking, setIsSpeaking]   = useState(false);
   const [daysInfo, setDaysInfo]       = useState(null);
   const [showKeyModal, setShowKeyModal] = useState(false);
-  const [hasError, setHasError]       = useState(false);
   const [apiKey, setApiKey] = useState(() => {
     if (ENV_KEY) return ENV_KEY;
-    try { return localStorage.getItem('magic_mirror_key') || ''; } catch { return ''; }
+    try { return localStorage.getItem('specchio_fate_key') || ''; } catch { return ''; }
   });
 
-  const videoRef = useRef(null);
+  const videoRef  = useRef(null);
   const streamRef = useRef(null);
-  const recRef = useRef(null);
-  // Bewaar parsed datum voor hergebruik bij opnieuw proberen
-  const parsedDateRef = useRef(null);
+  const recRef    = useRef(null);
+  const parsedRef = useRef(null);
 
   // Camera
   useEffect(() => {
@@ -510,71 +555,60 @@ export default function MagischeSpiegel() {
         const stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user' }, audio:false });
         streamRef.current = stream;
         if (videoRef.current) videoRef.current.srcObject = stream;
-      } catch { /* geen camera */ }
+      } catch {}
     })();
     return () => streamRef.current?.getTracks().forEach(t => t.stop());
   }, []);
 
-  // Spreek de vraag voor bij elke stap
+  // Spreek opening — Italiaans
   useEffect(() => {
     let cancelled = false;
     const delay = setTimeout(() => {
       if (cancelled) return;
       if (step === STEP.NAME) {
         setIsSpeaking(true);
-        speakWithFallback(SPOKEN_Q.name, 'nl', () => { if (!cancelled) setIsSpeaking(false); });
+        speakWithFallback(Q.name_it, 'it', () => { if (!cancelled) setIsSpeaking(false); });
       } else if (step === STEP.DATE && name) {
         setIsSpeaking(true);
-        speakWithFallback(SPOKEN_Q.date(name), 'nl', () => { if (!cancelled) setIsSpeaking(false); });
+        speakWithFallback(Q.date_it(name), 'it', () => { if (!cancelled) setIsSpeaking(false); });
       }
     }, step === STEP.NAME ? 900 : 400);
     return () => { cancelled = true; clearTimeout(delay); };
   }, [step]);
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
+  // ── Datum parser (NL + IT maandnamen) ───────────────────────────────────
   const parseBirthDate = (input) => {
     const raw = input.trim().toLowerCase();
-
-    // Maandnamen → nummer (NL volledig + afkortingen + EN als bonus)
     const MAANDEN = {
-      januari:1, jan:1, january:1,
-      februari:2, feb:2, february:2,
-      maart:3, mrt:3, mar:3, march:3,
-      april:4, apr:4,
-      mei:5, may:5,
-      juni:6, jun:6, june:6,
-      juli:7, jul:7, july:7,
-      augustus:8, aug:8,
-      september:9, sep:9, sept:9,
-      oktober:10, okt:10, oct:10, october:10,
-      november:11, nov:11,
-      december:12, dec:12,
+      gennaio:1,  gen:1,  january:1,   jan:1,    januari:1,
+      febbraio:2, feb:2,  february:2,  februari:2,
+      marzo:3,    mar:3,  march:3,     maart:3,  mrt:3,
+      aprile:4,   apr:4,  april:4,
+      maggio:5,   mag:5,  may:5,       mei:5,
+      giugno:6,   giu:6,  june:6,      juni:6,   jun:6,
+      luglio:7,   lug:7,  july:7,      juli:7,   jul:7,
+      agosto:8,   ago:8,  august:8,    augustus:8, aug:8,
+      settembre:9, set:9, september:9, sep:9,    sept:9,
+      ottobre:10, ott:10, october:10,  oktober:10, okt:10, oct:10,
+      novembre:11, nov:11,
+      dicembre:12, dic:12, december:12, december_:12,
     };
-
-    // ── Poging 1: maandnaam aanwezig (b.v. "4 april", "april 4", "4e april 2010")
     const maandMatch = raw.match(
-      /\b(januari|jan|februari|feb|maart|mrt|mar|april|apr|mei|juni|jun|juli|jul|augustus|aug|september|sept?|oktober|okt|oct|november|nov|december|dec|january|february|march|may|june|july|august|october)\b/
+      /\b(gennaio|gen|febbraio|feb|marzo|mar|aprile|apr|maggio|mag|giugno|giu|luglio|lug|agosto|ago|settembre|set|ottobre|ott|novembre|nov|dicembre|dic|januari|februari|maart|mrt|april|mei|juni|juli|augustus|september|sept|oktober|okt|november|december|january|february|march|may|june|july|august|october)\b/
     );
     if (maandMatch) {
       const month = MAANDEN[maandMatch[1]];
-      // Haal alle losse getallen uit de string
       const nums = raw.match(/\d+/g)?.map(Number) || [];
-      // Eerste getal <= 31 is de dag, negeer getallen >= 100 (jaar)
       const day = nums.find(n => n >= 1 && n <= 31);
       if (day && month) return { day, month };
     }
-
-    // ── Poging 2: numeriek formaat "15-04", "15/04", "15.04", "15 04"
     const clean = raw.replace(/[\/\.\s]/g, '-');
     const parts = clean.split('-').map(p => parseInt(p, 10));
     if (parts.length >= 2) {
       const [a, b] = parts;
-      // dag-maand volgorde
       if (a >= 1 && a <= 31 && b >= 1 && b <= 12) return { day:a, month:b };
-      // maand-dag volgorde (EN stijl, als a > 12)
       if (b >= 1 && b <= 31 && a >= 1 && a <= 12) return { day:b, month:a };
     }
-
     return null;
   };
 
@@ -587,124 +621,100 @@ export default function MagischeSpiegel() {
     return diff;
   };
 
-  // ── Stap 1: naam ─────────────────────────────────────────────────────────
   const confirmName = () => {
-    if (!name.trim()) { setStatus('Vertel mij eerst hoe je heet! 🌟'); return; }
-    setStatus('');
-    setStep(STEP.DATE);
+    if (!name.trim()) { setStatus('Dimmi prima il tuo nome! 🌟'); return; }
+    setStatus(''); setStep(STEP.DATE);
   };
 
-  // ── Stap 2: datum → API ──────────────────────────────────────────────────
   const confirmDate = () => {
     const parsed = parseBirthDate(birthInput);
-    if (!parsed) { setStatus('Ik begrijp de datum niet. Zeg bijv. 4 april of 15-04 ✨'); return; }
+    if (!parsed) { setStatus('Non capisco la data. Scrivi es. 4 aprile o 15-04 ✨'); return; }
     const days = computeDaysUntil(parsed.day, parsed.month);
-    parsedDateRef.current = { ...parsed, days };
-    setDaysInfo(days);
-    setStatus('');
-    setHasError(false);
+    parsedRef.current = { ...parsed, days };
+    setDaysInfo(days); setStatus('');
     setStep(STEP.DONE);
     fetchMessage(name, parsed.day, parsed.month, days);
   };
 
-  // ── Opnieuw proberen ─────────────────────────────────────────────────────
-  const handleRetry = () => {
-    if (!parsedDateRef.current) return;
-    const { day, month, days } = parsedDateRef.current;
-    setHasError(false);
-    setStatus('');
-    fetchMessage(name, day, month, days);
-  };
-
-  // ── Microfoon ────────────────────────────────────────────────────────────
   const startListening = (target) => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) { setStatus('Microfoon werkt niet in deze browser 🎤'); return; }
+    if (!SR) { setStatus('Microfono non disponibile 🎤'); return; }
     try { recRef.current?.stop(); } catch {}
     const rec = new SR();
     recRef.current = rec;
-    rec.lang = 'nl-NL'; rec.continuous = false; rec.interimResults = false;
-    rec.onstart  = () => { setIsListening(true);  setListenTarget(target); setStatus('Ik luister... 👂'); };
+    rec.lang = 'it-IT'; rec.continuous = false; rec.interimResults = false;
+    rec.onstart  = () => { setIsListening(true);  setListenTarget(target); setStatus('Sto ascoltando... 👂'); };
     rec.onend    = () => { setIsListening(false); setListenTarget(null);   setStatus(''); };
-    rec.onerror  = () => { setIsListening(false); setListenTarget(null);   setStatus('Niet goed gehoord 🌟'); };
+    rec.onerror  = () => { setIsListening(false); setListenTarget(null);   setStatus('Non ho capito 🌟'); };
     rec.onresult = (e) => {
       const heard = e.results[0][0].transcript;
-      if (target === STEP.NAME) {
-        setName(heard.replace(/[^a-zA-ZÀ-ÿ\s'-]/g, '').trim());
-      } else {
-        // Bewaar de gesproken tekst direct — parseBirthDate herkent maandnamen
-        setBirthInput(heard);
-      }
+      if (target === STEP.NAME) setName(heard.replace(/[^a-zA-ZÀ-ÿ\s'-]/g,'').trim());
+      else setBirthInput(heard);
     };
     rec.start();
   };
 
-  // ── Magische fallback-boodschappen (als API niet bereikbaar is) ──────────
+  // ── Fallback boodschappen ─────────────────────────────────────────────
   const buildFallback = (n, day, month, daysUntil) => {
+    const mesi = ['gennaio','febbraio','marzo','aprile','maggio','giugno',
+      'luglio','agosto','settembre','ottobre','novembre','dicembre'];
     const maanden = ['januari','februari','maart','april','mei','juni',
       'juli','augustus','september','oktober','november','december'];
-    const maand = maanden[month - 1];
+    const mese = mesi[month - 1], maand = maanden[month - 1];
 
-    // Persoonlijke boodschap afhankelijk van timing
-    let begroeting = '';
-    if (daysUntil === 0)
-      begroeting = `Vandaag is jouw grote dag, ${n}! De hele wereld is blij dat jij er bent! 🎉`;
-    else if (daysUntil > 0 && daysUntil <= 7)
-      begroeting = `Nog maar ${daysUntil} dag${daysUntil===1?'':'en'} te gaan, ${n}! Jouw verjaardag komt er heel snel aan! 🎈`;
-    else if (daysUntil < 0 && daysUntil >= -7)
-      begroeting = `Gefeliciteerd, ${n}! ${Math.abs(daysUntil)} dag${Math.abs(daysUntil)===1?'':'en'} geleden was jouw bijzondere dag. Ik hoop dat je er nog steeds van geniet! 🎂`;
-    else
-      begroeting = `Wat bijzonder dat jij op ${day} ${maand} geboren bent, ${n}! Dat is een heel magische dag! 🌟`;
+    let it_greet = '', nl_greet = '';
+    if (daysUntil === 0) {
+      it_greet = `Oggi è il tuo giorno magico, ${n}! Il mondo intero è felice che tu esista!`;
+      nl_greet = `Vandaag is jouw magische dag, ${n}! De hele wereld is blij dat jij er bent!`;
+    } else if (daysUntil > 0 && daysUntil <= 7) {
+      it_greet = `Mancano solo ${daysUntil} giorn${daysUntil===1?'o':'i'}, ${n}! Il tuo compleanno si avvicina!`;
+      nl_greet = `Nog maar ${daysUntil} dag${daysUntil===1?'':'en}, ${n}! Jouw verjaardag komt eraan!`;
+    } else if (daysUntil < 0 && daysUntil >= -7) {
+      it_greet = `Auguri in ritardo, ${n}! ${Math.abs(daysUntil)} giorn${Math.abs(daysUntil)===1?'o':'i'} fa era il tuo giorno speciale.`;
+      nl_greet = `Gefeliciteerd, ${n}! ${Math.abs(daysUntil)} dag${Math.abs(daysUntil)===1?'':'en'} geleden was jouw bijzondere dag.`;
+    } else {
+      it_greet = `Che meraviglia essere nati il ${day} ${mese}, ${n}! Un giorno davvero incantato!`;
+      nl_greet = `Wat bijzonder dat jij op ${day} ${maand} geboren bent, ${n}! Echt een magische dag!`;
+    }
 
-    const boodschap = `${begroeting} De Magische Spiegel weet zeker dat jij een heel speciaal iemand bent, want op jouw verjaardag schijnt er altijd een beetje extra magie in de lucht. Sluit je ogen en maak een wens — soms komen die echt uit! ✨`;
+    const it_msg = `${it_greet} Lo Specchio delle Fate sa che sei una persona speciale — nella tua nascita il cielo era pieno di stelle danzanti. Chiudi gli occhi ed esprimi un desiderio... a volte si avverano davvero! ✨`;
+    const nl_msg = `${nl_greet} De Feeënspie­gel weet zeker dat jij bijzonder bent — bij jouw geboorte dansten de sterren aan de hemel. Sluit je ogen en maak een wens... soms komen ze echt uit! ✨`;
 
-    // Vaste sprookjesachtige feitjes per seizoen (zodat het altijd klopt)
-    const seizoenFeitjes = {
-      winter: [ // dec jan feb
-        { year: 1812, nl: 'Schreven de gebroeders Grimm hun eerste sprookjesboek vol magische verhalen voor kinderen.' },
-        { year: 1879, nl: 'Werd voor het eerst elektrisch licht gebruikt — net als een toverstaf die de nacht verlicht!' },
-        { year: 1955, nl: 'Opende het eerste Disneyland zijn poorten, een echt sprookjespark vol dromen.' },
+    const stagioneFeitjes = {
+      inverno: [
+        { year:1812, it:'I fratelli Grimm scrissero il loro primo libro di fiabe piene di magia.', nl:'De gebroeders Grimm schreven hun eerste sprookjesboek.' },
+        { year:1879, it:'Per la prima volta si usò la luce elettrica — come una bacchetta magica!', nl:'Voor het eerst werd elektrisch licht gebruikt — als een toverstaf!' },
+        { year:1955, it:'Aprì il primo Disneyland, un vero parco delle fate pieno di sogni.', nl:'Het eerste Disneyland opende, een echt sprookjespark vol dromen.' },
       ],
-      lente: [ // mrt apr mei
-        { year: 1902, nl: 'Verscheen het eerste boek over het Land van Oz, met de beroemde Tovenaar.' },
-        { year: 1937, nl: 'Was Sneeuwwitje de eerste lange animatiefilm ooit — en ze leefden nog lang en gelukkig!' },
-        { year: 1989, nl: 'Zwom de Kleine Zeemeermin voor het eerst op het witte doek — een magische wereld onder water.' },
+      primavera: [
+        { year:1902, it:'Apparve il primo libro sul Mago di Oz, il grande stregone.', nl:'Het eerste boek over de Tovenaar van Oz verscheen.' },
+        { year:1937, it:'Biancaneve fu il primo lungometraggio d\'animazione — e vissero felici e contenti!', nl:'Sneeuwwitje was de eerste lange animatiefilm.' },
+        { year:1989, it:'La Sirenetta nuotò per la prima volta sullo schermo magico.', nl:'De Kleine Zeemeermin zwom voor het eerst op het witte doek.' },
       ],
-      zomer: [ // jun jul aug
-        { year: 1865, nl: 'Dook Alice voor het eerst in het konijnenhol en belandde in Wonderland.' },
-        { year: 1977, nl: 'Vloog Luke Skywalker voor het eerst door de sterren — een sprookje in de ruimte!' },
-        { year: 1997, nl: 'Besteeg Harry Potter voor het eerst zijn bezem en vloog naar Zweinstein.' },
+      estate: [
+        { year:1865, it:'Alice cadde nel buco del coniglio e scoprì il Paese delle Meraviglie.', nl:'Alice viel in het konijnenhol en ontdekte Wonderland.' },
+        { year:1977, it:'Luke Skywalker volò per la prima volta tra le stelle — una favola nello spazio!', nl:'Luke Skywalker vloog voor het eerst door de sterren.' },
+        { year:1997, it:'Harry Potter salì sulla sua scopa e volò verso Hogwarts.', nl:'Harry Potter besteeg zijn bezem en vloog naar Hogwarts.' },
       ],
-      herfst: [ // sep okt nov
-        { year: 1889, nl: 'Opende de Eiffeltoren zijn deuren — zo hoog als een tovenaars hoed!' },
-        { year: 1928, nl: 'Piepte Mickey Mouse voor het eerst, het begin van een magische wereld vol tekenfilms.' },
-        { year: 1952, nl: 'Verscheen Pippi Langkous voor het eerst op televisie, de sterkste meisje ter wereld.' },
+      autunno: [
+        { year:1889, it:'Aprì la Torre Eiffel — alta come il cappello di un mago!', nl:'De Eiffeltoren opende — zo hoog als een tovenaars hoed!' },
+        { year:1928, it:'Mickey Mouse parlò per la prima volta, iniziando un mondo magico.', nl:'Mickey Mouse sprak voor het eerst, begin van een magische wereld.' },
+        { year:1952, it:'Pippi Calzelunghe apparve in televisione per la prima volta.', nl:'Pippi Langkous verscheen voor het eerst op televisie.' },
       ],
     };
 
-    const seizoen = [12,1,2].includes(month) ? 'winter'
-      : [3,4,5].includes(month) ? 'lente'
-      : [6,7,8].includes(month) ? 'zomer' : 'herfst';
+    const stagione = [12,1,2].includes(month) ? 'inverno'
+      : [3,4,5].includes(month) ? 'primavera'
+      : [6,7,8].includes(month) ? 'estate' : 'autunno';
 
-    const feitjes = seizoenFeitjes[seizoen].map(f => ({
-      year: f.year,
-      nl: f.nl, en: f.nl, fr: f.nl, de: f.nl,
-    }));
-
-    return {
-      nl: boodschap, en: boodschap, fr: boodschap, de: boodschap,
-      facts: feitjes,
-      _isFallback: true,
-    };
+    return { it: it_msg, nl: nl_msg, facts: stagioneFeitjes[stagione], _isFallback: true };
   };
 
-  // ── Claude API ───────────────────────────────────────────────────────────
+  // ── API ───────────────────────────────────────────────────────────────────
   const fetchMessage = async (n, day, month, days) => {
-    if (!apiKey) { setStatus('Geen API sleutel ingesteld 🔑'); return; }
-    setIsThinking(true);
-    setMessage(null);
-    setHasError(false);
-    setStatus('De spiegel denkt na... ✨');
+    if (!apiKey) { setStatus('Nessuna chiave API impostata 🔑'); return; }
+    setIsThinking(true); setMessage(null);
+    setStatus('Lo specchio sta pensando... ✨');
 
     try {
       const resp = await fetchWithRetry(() =>
@@ -713,78 +723,67 @@ export default function MagischeSpiegel() {
           headers:{ 'Content-Type':'application/json' },
           body: JSON.stringify({
             model:'claude-sonnet-4-20250514',
-            max_tokens:1000,
+            max_tokens:1200,
             messages:[{ role:'user', content:buildPrompt(n, day, month, days) }],
           }),
         }).then(r => r.json())
       );
-
-      if (resp.error) throw new Error(resp.error.message || 'API fout');
-
+      if (resp.error) throw new Error(resp.error.message);
       const raw = resp.content?.[0]?.text || '{}';
       const data = JSON.parse(raw.replace(/```json|```/g,'').trim());
-      setMessage(data);
-      setHasError(false);
-      setStatus('');
-      if (data.nl) {
+      setMessage(data); setStatus('');
+      if (data.it) {
         setIsSpeaking(true);
-        speakAll(data.nl, data.facts || [], 'nl', () => setIsSpeaking(false));
+        speakAll(data.it, data.facts || [], 'it', () => setIsSpeaking(false));
       }
-    } catch (err) {
-      // ── Fallback: spiegel vertelt altijd iets moois ───────────────────
-      const fallback = buildFallback(n, day, month, days);
-      setMessage(fallback);
-      setHasError(false);
-      setStatus('✨ De spiegel spreekt vanuit haar hart...');
+    } catch {
+      const fb = buildFallback(n, day, month, days);
+      setMessage(fb);
+      setStatus('✨ Lo specchio parla dal cuore...');
       setTimeout(() => setStatus(''), 3500);
       setIsSpeaking(true);
-      speakAll(fallback.nl, fallback.facts || [], 'nl', () => setIsSpeaking(false));
+      speakAll(fb.it, fb.facts || [], 'it', () => setIsSpeaking(false));
     }
     setIsThinking(false);
   };
 
-  // ── Reset voor volgend kind ──────────────────────────────────────────────
   const handleReset = () => {
     window.speechSynthesis.cancel();
     setStep(STEP.NAME); setName(''); setBirthInput('');
     setMessage(null); setDaysInfo(null);
     setStatus(''); setIsSpeaking(false);
-    setHasError(false);
-    parsedDateRef.current = null;
+    parsedRef.current = null;
   };
 
   const saveKey = (k) => {
     setApiKey(k);
-    try { localStorage.setItem('magic_mirror_key', k); } catch {}
+    try { localStorage.setItem('specchio_fate_key', k); } catch {}
     setShowKeyModal(false);
   };
 
-  // Banner boven spiegel
   const banner = (() => {
     if (daysInfo === null) return null;
-    if (daysInfo === 0)              return { text:'🎂 Vandaag is jouw grote dag!', color:'#f5e642' };
-    if (daysInfo>0 && daysInfo<=7)   return { text:`⏳ Nog ${daysInfo} dag${daysInfo===1?'':'en'} tot jouw verjaardag!`, color:'#ffb347' };
-    if (daysInfo<0 && daysInfo>=-7)  return { text:`🎉 Gefeliciteerd! ${Math.abs(daysInfo)} dag${Math.abs(daysInfo)===1?'':'en'} geleden!`, color:'#a8edea' };
+    if (daysInfo === 0)              return { it:'🎂 Oggi è il tuo grande giorno!',      nl:'Vandaag is jouw grote dag!',   color:'#f5d060' };
+    if (daysInfo>0 && daysInfo<=7)   return { it:`⏳ Fra ${daysInfo} giorn${daysInfo===1?'o':'i'} è il tuo compleanno!`, nl:`Nog ${daysInfo} dag${daysInfo===1?'':'en'}!`, color:'#ffb347' };
+    if (daysInfo<0 && daysInfo>=-7)  return { it:`🎉 Tanti auguri! ${Math.abs(daysInfo)} giorn${Math.abs(daysInfo)===1?'o':'i'} fa!`, nl:`Gefeliciteerd! ${Math.abs(daysInfo)} dag${Math.abs(daysInfo)===1?'':'en'} geleden!`, color:'#a8edea' };
     return null;
   })();
 
   const isDone = step === STEP.DONE;
 
-  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div style={S.app}>
       <style>{CSS}</style>
-
       <div style={S.bg}/>
-      <div style={S.bgForest}/>
+      <div style={S.bgFresco}/>
 
-      {/* Vuurvliegjes */}
+      {/* Gouden stofdeeltjes */}
       <div style={{ position:'fixed', inset:0, pointerEvents:'none', zIndex:0, overflow:'hidden' }}>
         {FIREFLIES.map(f => (
           <div key={f.id} style={{
             position:'absolute', left:`${f.x}%`, top:`${f.y}%`,
-            width:5, height:5, borderRadius:'50%', background:'#f5e642',
-            boxShadow:'0 0 7px #f5e642, 0 0 14px rgba(245,230,66,0.38)',
+            width:4, height:4, borderRadius:'50%', background:f.color,
+            boxShadow:`0 0 6px ${f.color}, 0 0 12px rgba(245,208,96,0.3)`,
             animation:`ffloat ${f.dur}s ease-in-out ${f.delay}s infinite`,
             '--dx':`${f.dx}px`, '--dy':`${f.dy}px`,
           }}/>
@@ -793,9 +792,33 @@ export default function MagischeSpiegel() {
 
       {/* Titel */}
       <header style={S.header}>
-        <h1 style={S.title}>✦ Magische Spiegel ✦</h1>
-        <p style={S.subtitle}>Vertel mij wie jij bent...</p>
+        <div style={S.titleDivider}>✦ ✦ ✦</div>
+        <h1 style={S.title}>Lo Specchio delle Fate</h1>
+        <p style={S.subtitle}>Dimmi chi sei... · Vertel mij wie jij bent...</p>
+        <div style={S.titleDivider}>✦ ✦ ✦</div>
       </header>
+
+      {/* Tekstballon BOVEN spiegel */}
+      <AnimatePresence>
+        {message && (
+          <div style={{ width:'100%', maxWidth:430, padding:'0 12px', marginBottom:4, position:'relative', zIndex:5 }}>
+            <SpeechBubble
+              message={message}
+              speakLang={speakLang}
+              setSpeakLang={setSpeakLang}
+              onSpeak={() => {
+                setIsSpeaking(true);
+                speakAll(
+                  message[speakLang] || message.it,
+                  message.facts || [],
+                  speakLang,
+                  () => setIsSpeaking(false)
+                );
+              }}
+            />
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Banner */}
       <AnimatePresence>
@@ -804,19 +827,20 @@ export default function MagischeSpiegel() {
             initial={{ opacity:0, y:-8 }} animate={{ opacity:1, y:0 }} exit={{ opacity:0 }}
             style={{ ...S.banner, borderColor:banner.color, color:banner.color }}
           >
-            {banner.text}
+            <div style={{ fontFamily:"'Cinzel', serif", fontSize:13 }}>{banner.it}</div>
+            <div style={{ fontFamily:"'Cormorant Garamond', serif", fontSize:11,
+              opacity:0.7, fontStyle:'italic' }}>🇳🇱 {banner.nl}</div>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Spiegel */}
-      <div style={S.mirrorWrap}>
-        <OrnateFrame W={270} H={330}/>
+      <div style={{ ...S.mirrorWrap, marginTop:10 }}>
+        <RenaissanceFrame W={280} H={346}/>
 
         <div style={S.mirrorGlass}>
           <video ref={videoRef} autoPlay playsInline muted style={S.video}/>
 
-          {/* Glinsterende deeltjes */}
           {isDone && message && (
             <div style={{ position:'absolute', inset:0, pointerEvents:'none', overflow:'hidden',
               borderRadius:'50% 50% 47% 47%', zIndex:3 }}>
@@ -832,7 +856,6 @@ export default function MagischeSpiegel() {
             </div>
           )}
 
-          {/* Setup overlay */}
           <AnimatePresence>
             {step !== STEP.DONE && (
               <SetupOverlay
@@ -846,29 +869,27 @@ export default function MagischeSpiegel() {
             )}
           </AnimatePresence>
 
-          {/* Denkende bollen */}
           {isThinking && (
             <div style={{ position:'absolute', bottom:14, left:'50%',
               transform:'translateX(-50%)', display:'flex', gap:6, zIndex:15 }}>
               {[0,200,400].map((d,i) => (
                 <div key={i} style={{
-                  width:8, height:8, borderRadius:'50%', background:'#f5e642',
+                  width:8, height:8, borderRadius:'50%', background:'#f5d060',
                   animation:`bounce 1s ease-in-out ${d}ms infinite`,
-                  boxShadow:'0 0 6px #f5e642',
+                  boxShadow:'0 0 6px #f5d060',
                 }}/>
               ))}
             </div>
           )}
 
-          {/* Spreekring */}
           {isSpeaking && (
-            <div style={{ position:'absolute', inset:-4, borderRadius:'50% 50% 47% 47%',
-              border:'3px solid #f5e642', animation:'speakRing 1s ease-in-out infinite',
+            <div style={{ position:'absolute', inset:-5, borderRadius:'50% 50% 47% 47%',
+              border:'3px solid #f5d060', animation:'speakRing 1.2s ease-in-out infinite',
               pointerEvents:'none', zIndex:4 }}/>
           )}
         </div>
 
-        {/* Naam badge onder spiegel */}
+        {/* Naam badge */}
         {isDone && name && (
           <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} style={S.nameBadge}>
             ✦ {name} ✦
@@ -877,37 +898,16 @@ export default function MagischeSpiegel() {
       </div>
 
       {/* Status */}
-      {status ? <p style={S.status}>{status}</p> : null}
+      {status && <p style={S.status}>{status}</p>}
 
-      {/* Tekstballon */}
-      <AnimatePresence>
-        {message && (
-          <div style={{ width:'100%', maxWidth:430, padding:'0 12px', marginTop:6 }}>
-            <SpeechBubble
-              message={message} lang={lang} setLang={setLang}
-              onSpeak={() => {
-                setIsSpeaking(true);
-                speakAll(
-                  message[lang] || message.nl,
-                  message.facts || [],
-                  LANG_CODE[lang],
-                  () => setIsSpeaking(false)
-                );
-              }}
-            />
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Fallback-indicator: subtiele melding als spiegel uit eigen hart spreekt ── */}
+      {/* Fallback indicator */}
       <AnimatePresence>
         {message?._isFallback && !isThinking && (
-          <motion.p
-            initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
-            style={{ margin:'2px 0 0', fontSize:10, color:'rgba(245,230,66,0.32)',
-              fontStyle:'italic', textAlign:'center', position:'relative', zIndex:5 }}
-          >
-            ✦ De spiegel spreekt vanuit haar eigen magische geheugen ✦
+          <motion.p initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+            style={{ margin:'2px 0 0', fontSize:10, color:'rgba(245,208,96,0.3)',
+              fontStyle:'italic', textAlign:'center', zIndex:5,
+              fontFamily:"'Cormorant Garamond', serif" }}>
+            ✦ Lo specchio parla dalla sua memoria incantata ✦
           </motion.p>
         )}
       </AnimatePresence>
@@ -918,44 +918,42 @@ export default function MagischeSpiegel() {
           initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }}
           transition={{ delay:1.8 }}
           style={{ marginTop:14, display:'flex', flexDirection:'column',
-            alignItems:'center', gap:5, position:'relative', zIndex:5 }}
+            alignItems:'center', gap:5, zIndex:5 }}
         >
           <button onClick={handleReset} style={S.btnNext}>
-            ✨ Volgend kind ✨
+            ✨ Prossimo bambino · Volgend kind ✨
           </button>
-          <p style={{ margin:0, fontSize:10, color:'rgba(245,230,66,0.26)', fontStyle:'italic' }}>
-            Tik hier als een ander kind aan de beurt is
+          <p style={{ margin:0, fontSize:9.5, color:'rgba(245,208,96,0.24)',
+            fontStyle:'italic', fontFamily:"'Cormorant Garamond', serif" }}>
+            Tocca qui quando è il turno di un altro · Tik hier voor een ander kind
           </p>
         </motion.div>
       )}
 
-      {/* API sleutel knop — verborgen als env variabele is ingesteld */}
+      {/* API sleutel */}
       {!ENV_KEY && (
         <button onClick={() => setShowKeyModal(true)} style={S.btnKey}>
           <Key size={10} style={{ marginRight:4 }}/>
-          {apiKey ? 'API sleutel ✓' : 'API sleutel instellen'}
+          {apiKey ? 'Chiave API ✓' : 'Imposta chiave API'}
         </button>
       )}
 
-      {/* API sleutel modal */}
       <AnimatePresence>
         {showKeyModal && (
           <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
-            style={S.modal}
-            onClick={e => e.target===e.currentTarget && setShowKeyModal(false)}
-          >
+            style={S.modal} onClick={e => e.target===e.currentTarget && setShowKeyModal(false)}>
             <div style={S.modalBox}>
-              <h2 style={S.modalTitle}>🔑 API Sleutel</h2>
+              <h2 style={S.modalTitle}>🔑 Chiave API · API Sleutel</h2>
               <p style={S.modalHint}>
-                Voer de Anthropic API sleutel in.<br/>
-                Wordt alleen op dit apparaat opgeslagen.
+                Inserisci la tua chiave Anthropic.<br/>
+                <span style={{ opacity:0.6 }}>Alleen opgeslagen op dit apparaat.</span>
               </p>
               <input type="password" id="keyInp" defaultValue={apiKey}
                 placeholder="sk-ant-..." style={S.modalInput}/>
               <div style={{ display:'flex', gap:10, marginTop:16 }}>
-                <button onClick={() => setShowKeyModal(false)} style={S.modalCancel}>Annuleer</button>
+                <button onClick={() => setShowKeyModal(false)} style={S.modalCancel}>Annulla</button>
                 <button onClick={() => saveKey(document.getElementById('keyInp').value)}
-                  style={S.modalSave}>Opslaan</button>
+                  style={S.modalSave}>Salva ✦</button>
               </div>
             </div>
           </motion.div>
@@ -967,202 +965,194 @@ export default function MagischeSpiegel() {
 
 // ── CSS ───────────────────────────────────────────────────────────────────
 const CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&display=swap');
   * { box-sizing:border-box; }
-  input::placeholder { color:rgba(245,230,66,0.26); }
+  input::placeholder { color:rgba(245,208,96,0.22); }
 
   @keyframes ffloat {
     0%   { opacity:0; transform:translate(0,0); }
-    25%  { opacity:0.82; }
-    50%  { opacity:0.28; transform:translate(var(--dx,20px),var(--dy,-15px)); }
-    75%  { opacity:0.68; }
+    25%  { opacity:0.75; }
+    50%  { opacity:0.22; transform:translate(var(--dx,20px),var(--dy,-18px)); }
+    75%  { opacity:0.62; }
     100% { opacity:0; transform:translate(0,0); }
   }
   @keyframes sparkle {
-    0%,100% { opacity:0; transform:scale(0.5); }
-    50%     { opacity:0.88; transform:scale(1.2); }
+    0%,100% { opacity:0; transform:scale(0.4); }
+    50%     { opacity:0.85; transform:scale(1.3); }
   }
   @keyframes bounce {
-    0%,100% { transform:translateY(0); opacity:0.38; }
-    50%     { transform:translateY(-6px); opacity:1; }
+    0%,100% { transform:translateY(0); opacity:0.35; }
+    50%     { transform:translateY(-7px); opacity:1; }
   }
   @keyframes speakRing {
-    0%,100% { opacity:0.32; transform:scale(1); }
+    0%,100% { opacity:0.28; transform:scale(1); }
     50%     { opacity:1; transform:scale(1.05); }
   }
   @keyframes mirrorPulse {
-    0%,100% { box-shadow:0 0 32px rgba(212,160,23,0.22),0 0 65px rgba(212,160,23,0.07),inset 0 0 26px rgba(0,0,0,0.55); }
-    50%     { box-shadow:0 0 52px rgba(212,160,23,0.42),0 0 105px rgba(212,160,23,0.14),inset 0 0 26px rgba(0,0,0,0.55); }
+    0%,100% { box-shadow:0 0 36px rgba(180,130,20,0.2),0 0 70px rgba(180,130,20,0.06),inset 0 0 30px rgba(0,0,0,0.6); }
+    50%     { box-shadow:0 0 58px rgba(180,130,20,0.42),0 0 110px rgba(180,130,20,0.14),inset 0 0 30px rgba(0,0,0,0.6); }
   }
   @keyframes titleShimmer {
-    0%,100% { text-shadow:0 0 10px rgba(245,230,66,0.42),0 2px 4px rgba(0,0,0,0.8); }
-    50%     { text-shadow:0 0 22px rgba(245,230,66,0.88),0 0 42px rgba(245,230,66,0.32),0 2px 4px rgba(0,0,0,0.8); }
+    0%,100% { text-shadow:0 0 12px rgba(245,208,96,0.35),0 2px 4px rgba(0,0,0,0.9); }
+    50%     { text-shadow:0 0 26px rgba(245,208,96,0.85),0 0 50px rgba(245,208,96,0.28),0 2px 4px rgba(0,0,0,0.9); }
   }
   @keyframes bannerGlow {
-    0%,100% { box-shadow:0 0 9px rgba(245,230,66,0.2); }
-    50%     { box-shadow:0 0 20px rgba(245,230,66,0.56); }
-  }
-  @keyframes retryPulse {
-    0%,100% { box-shadow:0 0 10px rgba(255,140,0,0.3); }
-    50%     { box-shadow:0 0 22px rgba(255,140,0,0.7); }
+    0%,100% { box-shadow:0 0 10px rgba(245,208,96,0.18); }
+    50%     { box-shadow:0 0 22px rgba(245,208,96,0.5); }
   }
 `;
 
 // ── Styles ────────────────────────────────────────────────────────────────
 const S = {
   app: {
-    minHeight:'100vh', background:'#0b0802',
-    color:'#f0e8d0', fontFamily:"'IM Fell English', serif",
+    minHeight:'100vh',
+    background:'#0f0804',
+    color:'#f0e0c0',
+    fontFamily:"'Cormorant Garamond', serif",
     display:'flex', flexDirection:'column', alignItems:'center',
-    padding:'0 0 44px', position:'relative', overflow:'hidden',
+    padding:'0 0 48px', position:'relative', overflow:'hidden',
   },
   bg: {
     position:'fixed', inset:0, pointerEvents:'none', zIndex:0,
-    background:'radial-gradient(ellipse at 50% 0%,rgba(52,30,4,0.78) 0%,rgba(7,4,2,0.95) 60%,#030200 100%)',
+    background:'radial-gradient(ellipse at 50% 0%,rgba(80,38,6,0.72) 0%,rgba(14,8,2,0.96) 58%,#080401 100%)',
   },
-  bgForest: {
+  bgFresco: {
     position:'fixed', inset:0, pointerEvents:'none', zIndex:0,
     background:`
-      radial-gradient(ellipse at 12% 90%,rgba(16,42,7,0.3) 0%,transparent 50%),
-      radial-gradient(ellipse at 88% 90%,rgba(16,42,7,0.3) 0%,transparent 50%),
-      radial-gradient(ellipse at 50% 100%,rgba(26,52,7,0.38) 0%,transparent 38%)
+      radial-gradient(ellipse at 10% 95%,rgba(60,24,4,0.22) 0%,transparent 48%),
+      radial-gradient(ellipse at 90% 95%,rgba(60,24,4,0.22) 0%,transparent 48%),
+      radial-gradient(ellipse at 50% 100%,rgba(80,36,4,0.28) 0%,transparent 40%)
     `,
   },
   header: {
     width:'100%', maxWidth:480,
-    padding:'6px 16px 3px',
+    padding:'8px 16px 4px',
     display:'flex', flexDirection:'column', alignItems:'center',
-    position:'relative', zIndex:5,
+    position:'relative', zIndex:5, gap:3,
+  },
+  titleDivider: {
+    fontSize:11, color:'rgba(245,208,96,0.35)',
+    letterSpacing:'0.5em', fontFamily:"'Cinzel', serif",
   },
   title: {
-    margin:'0 0 2px', fontSize:22, fontWeight:700,
-    color:'#f5e642',
-    animation:'titleShimmer 3s ease-in-out infinite',
-    letterSpacing:'0.05em',
+    margin:'2px 0', fontSize:20, fontWeight:600,
+    color:'#f5d060', letterSpacing:'0.12em',
+    fontFamily:"'Cinzel', serif",
+    animation:'titleShimmer 3.5s ease-in-out infinite',
   },
   subtitle: {
-    margin:'3px 0 0', fontSize:11,
-    color:'rgba(245,230,66,0.38)',
-    letterSpacing:'0.14em', fontStyle:'italic',
+    margin:'2px 0', fontSize:10,
+    color:'rgba(245,208,96,0.35)',
+    letterSpacing:'0.10em', fontStyle:'italic',
+    fontFamily:"'Cormorant Garamond', serif",
   },
   banner: {
-    width:'100%', maxWidth:420, margin:'0 12px 8px',
+    width:'100%', maxWidth:420, margin:'2px 12px 5px',
     padding:'7px 16px',
-    background:'rgba(16,9,0,0.86)',
-    border:'1px solid', borderRadius:20,
-    fontSize:13, textAlign:'center',
-    fontStyle:'italic', letterSpacing:'0.04em',
+    background:'rgba(20,10,2,0.9)',
+    border:'1px solid', borderRadius:18,
+    textAlign:'center', letterSpacing:'0.04em',
     zIndex:5, position:'relative',
     animation:'bannerGlow 2.5s ease-in-out infinite',
+    display:'flex', flexDirection:'column', gap:3,
   },
   mirrorWrap: {
-    position:'relative', width:270, height:330,
+    position:'relative', width:280, height:346,
     display:'flex', alignItems:'center', justifyContent:'center',
     zIndex:5, marginBottom:6,
   },
   mirrorGlass: {
     position:'absolute',
-    top:18, left:22,
-    width:226, height:290,
+    top:22, left:24,
+    width:232, height:298,
     borderRadius:'50% 50% 47% 47%',
     overflow:'hidden',
-    background:'linear-gradient(160deg,#0b1606 0%,#030702 100%)',
-    animation:'mirrorPulse 4s ease-in-out infinite',
+    background:'linear-gradient(160deg,#0e0906 0%,#040200 100%)',
+    animation:'mirrorPulse 4.5s ease-in-out infinite',
     zIndex:1,
   },
   video: {
-    width:'100%', height:'100%',
-    objectFit:'cover',
+    width:'100%', height:'100%', objectFit:'cover',
     transform:'scaleX(-1)',
-    filter:'brightness(0.82) contrast(1.06) saturate(0.76)',
+    filter:'brightness(0.80) contrast(1.08) saturate(0.7) sepia(0.12)',
   },
   nameBadge: {
-    position:'absolute', bottom:-10, left:'50%',
+    position:'absolute', bottom:-12, left:'50%',
     transform:'translateX(-50%)',
-    background:'linear-gradient(135deg,rgba(26,14,2,0.96),rgba(16,9,0,0.96))',
-    border:'1px solid rgba(212,160,23,0.46)',
-    borderRadius:20, padding:'4px 18px',
-    fontSize:12, color:'#f5e642',
+    background:'linear-gradient(135deg,rgba(30,14,2,0.97),rgba(18,8,0,0.97))',
+    border:'1px solid rgba(180,130,20,0.48)',
+    borderRadius:20, padding:'4px 20px',
+    fontSize:12, color:'#f5d060',
     whiteSpace:'nowrap', zIndex:10,
-    letterSpacing:'0.08em',
-    boxShadow:'0 2px 10px rgba(0,0,0,0.5)',
+    letterSpacing:'0.12em', fontFamily:"'Cinzel', serif",
+    boxShadow:'0 2px 12px rgba(0,0,0,0.6)',
   },
   status: {
-    fontSize:12, color:'rgba(245,230,66,0.55)',
+    fontSize:12, color:'rgba(245,208,96,0.5)',
     fontStyle:'italic', margin:'4px 12px',
     zIndex:5, textAlign:'center', position:'relative',
     maxWidth:380, lineHeight:1.6,
-  },
-  btnRetry: {
-    padding:'11px 28px',
-    background:'linear-gradient(135deg,#7a3800,#c05a00,#ff8c00,#c05a00,#7a3800)',
-    backgroundSize:'200% auto',
-    border:'none', borderRadius:30,
-    color:'#fff8f0', fontWeight:700, cursor:'pointer',
-    fontSize:14, fontFamily:"'IM Fell English', serif",
-    letterSpacing:'0.08em',
-    boxShadow:'0 4px 18px rgba(200,80,0,0.46)',
-    animation:'retryPulse 2s ease-in-out infinite',
+    fontFamily:"'Cormorant Garamond', serif",
   },
   btnNext: {
-    padding:'11px 28px',
-    background:'linear-gradient(135deg,#8B6914,#d4a017,#f5e642,#d4a017,#8B6914)',
+    padding:'11px 26px',
+    background:'linear-gradient(135deg,#6b3c00,#c8960a,#f5d060,#c8960a,#6b3c00)',
     backgroundSize:'200% auto',
     border:'none', borderRadius:30,
-    color:'#160b00', fontWeight:700, cursor:'pointer',
-    fontSize:14, fontFamily:"'IM Fell English', serif",
-    letterSpacing:'0.08em',
-    boxShadow:'0 4px 18px rgba(212,160,23,0.46),0 0 34px rgba(212,160,23,0.16)',
+    color:'#1a0800', fontWeight:600, cursor:'pointer',
+    fontSize:13, fontFamily:"'Cinzel', serif",
+    letterSpacing:'0.06em',
+    boxShadow:'0 4px 20px rgba(180,130,20,0.44),0 0 38px rgba(180,130,20,0.14)',
   },
   btnKey: {
     marginTop:14, padding:'5px 14px',
     background:'transparent',
-    border:'1px solid rgba(212,160,23,0.13)',
+    border:'1px solid rgba(180,130,20,0.12)',
     borderRadius:20, fontSize:10,
-    color:'rgba(212,160,23,0.36)',
-    letterSpacing:'0.1em', cursor:'pointer',
+    color:'rgba(180,130,20,0.34)',
+    letterSpacing:'0.10em', cursor:'pointer',
     display:'flex', alignItems:'center',
-    position:'relative', zIndex:5,
-    fontFamily:"'IM Fell English', serif",
+    zIndex:5, fontFamily:"'Cinzel', serif",
   },
   modal: {
-    position:'fixed', inset:0, background:'rgba(0,0,0,0.88)',
+    position:'fixed', inset:0, background:'rgba(0,0,0,0.9)',
     display:'flex', alignItems:'center', justifyContent:'center', zIndex:100,
   },
   modalBox: {
-    background:'linear-gradient(160deg,#160c05,#0a0502)',
-    border:'2px solid rgba(212,160,23,0.46)',
+    background:'linear-gradient(160deg,#1c0e04,#0c0501)',
+    border:'2px solid rgba(180,130,20,0.48)',
     borderRadius:20, padding:24, maxWidth:300, width:'90%',
-    boxShadow:'0 8px 40px rgba(0,0,0,0.8)',
+    boxShadow:'0 8px 44px rgba(0,0,0,0.85)',
   },
   modalTitle: {
-    margin:'0 0 4px', fontWeight:400, fontSize:18,
-    color:'#f5e642', textAlign:'center',
-    fontFamily:"'IM Fell English', serif",
+    margin:'0 0 4px', fontWeight:600, fontSize:16,
+    color:'#f5d060', textAlign:'center',
+    fontFamily:"'Cinzel', serif", letterSpacing:'0.06em',
   },
   modalHint: {
-    margin:'0 0 14px', fontSize:11, lineHeight:1.6,
-    color:'rgba(245,230,66,0.4)', textAlign:'center',
+    margin:'0 0 14px', fontSize:11, lineHeight:1.65,
+    color:'rgba(245,208,96,0.4)', textAlign:'center',
+    fontFamily:"'Cormorant Garamond', serif",
   },
   modalInput: {
     width:'100%',
-    background:'rgba(0,0,0,0.4)',
-    border:'1px solid rgba(212,160,23,0.26)',
+    background:'rgba(0,0,0,0.45)',
+    border:'1px solid rgba(180,130,20,0.28)',
     borderRadius:10, padding:'10px 14px',
-    fontSize:13, color:'#f0e8d0', outline:'none', textAlign:'center',
+    fontSize:13, color:'#f0e0c0', outline:'none', textAlign:'center',
   },
   modalCancel: {
     flex:1, padding:'9px', background:'transparent',
-    border:'1px solid rgba(255,255,255,0.1)', borderRadius:10,
-    color:'rgba(255,255,255,0.3)', cursor:'pointer', fontSize:12,
-    fontFamily:"'IM Fell English', serif",
+    border:'1px solid rgba(255,255,255,0.08)', borderRadius:10,
+    color:'rgba(255,255,255,0.28)', cursor:'pointer', fontSize:12,
+    fontFamily:"'Cinzel', serif",
   },
   modalSave: {
     flex:1, padding:'9px',
-    background:'linear-gradient(135deg,#d4a017,#f5e642)',
+    background:'linear-gradient(135deg,#c8960a,#f5d060)',
     border:'none', borderRadius:10,
-    color:'#160900', fontWeight:700, cursor:'pointer',
-    fontSize:12, fontFamily:"'IM Fell English', serif",
+    color:'#1a0800', fontWeight:700, cursor:'pointer',
+    fontSize:12, fontFamily:"'Cinzel', serif",
     letterSpacing:'0.05em',
   },
 };

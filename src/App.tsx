@@ -108,7 +108,7 @@ Rispondi SOLO come JSON senza markdown:
     keyCancel: 'Annuleer',
     keySave: 'Opslaan',
     keyBtn: (has) => has ? 'API sleutel ✓' : 'API sleutel instellen',
-    emoji: { name: '🧚', date: '🎂' },
+    emoji: { name: '🧚'🪄, date: '🎂' },
     promptSystem: `Je bent de Magische Spiegel in een betoverd sprookjesbos. Spreek warm, vrolijk en kindvriendelijk. Antwoord ALLEEN als JSON zonder markdown.`,
     buildPrompt: (name, day, month, daysUntil) => {
       const maanden = ['januari','februari','maart','april','mei','juni',

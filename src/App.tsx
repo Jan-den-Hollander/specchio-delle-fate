@@ -269,7 +269,7 @@ function MirrorContent({
           zIndex:10, gap:8,
         }}
       >
-        <div style={{ fontSize:26 }}>🧚</div>
+        <div style={{ fontSize:26 }}>🧚🪄</div>
 
         <p style={{
           color:'#f5d060', fontSize:12, textAlign:'center', margin:0,

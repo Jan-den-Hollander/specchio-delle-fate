@@ -54,7 +54,7 @@ const LANG = {
     keyCancel: 'Annulla',
     keySave: 'Salva',
     keyBtn: (has) => has ? 'Chiave API ✓' : 'Imposta chiave API',
-    emoji: { name: '🧚', date: '🎂' },
+    emoji: { name: '🧚'🪄, date: '🎂' },
     promptSystem: `Sei lo Specchio delle Fate in un bosco incantato. Parla in modo caldo, gioioso e adatto ai bambini. Rispondi SOLO in JSON senza markdown.`,
     buildPrompt: (name, day, month, daysUntil) => {
       const mesi = ['gennaio','febbraio','marzo','aprile','maggio','giugno',

@@ -396,7 +396,7 @@ function OrnateFrame({ W = 270, H = 330 }) {
       <ellipse cx={cx} cy={cy} rx={rx-8}  ry={ry-8}  fill="none" stroke="url(#gG2)" strokeWidth="1.6" opacity="0.6"/>
       <ellipse cx={cx} cy={cy} rx={rx-13} ry={ry-13} fill="none" stroke="#f5e642"   strokeWidth="0.5" opacity="0.18"/>
 
-      {kransPunten.filter(p => ['🌱','🍀'].includes(p.emoji)).map((p, i) => {
+      {kransPunten.filter(p => ['🌿','🍀'].includes(p.emoji)).map((p, i) => {
         const [px, py] = ptOnEllipse(cx, cy, rx + p.off, ry + p.off, p.a);
         return <text key={'g'+i} x={px} y={py} fontSize={p.fs} textAnchor="middle" dominantBaseline="middle"
           transform={'rotate('+p.rot+','+px+','+py+')'} filter="url(#emojiShadow)" style={{ userSelect:'none' }}>{p.emoji}</text>;

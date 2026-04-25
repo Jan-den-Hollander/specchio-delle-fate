@@ -327,25 +327,25 @@ function OrnateFrame({ W = 270, H = 330 }) {
     { a:111, emoji:'🌱🌿', fs:12, off: -3, rot:140 },
     { a:122, emoji:'🍀', fs:16, off:  6, rot:155 },
     { a:134, emoji:'🥀', fs:18, off: 13, rot:170 },
-    { a:146, emoji:'🌱🌿', fs:13, off: -2, rot:185 },
+    { a:146, emoji:'🌿', fs:13, off: -2, rot:185 },
     { a:157, emoji:'🌸', fs:20, off: 14, rot:200 },
     { a:169, emoji:'🍀', fs:14, off:  3, rot:215 },
     { a:180, emoji:'🌹', fs:21, off: 14, rot:180 },
-    { a:192, emoji:'🌱🌿', fs:12, off: -4, rot:245 },
+    { a:192, emoji:'🌿', fs:12, off: -4, rot:245 },
     { a:204, emoji:'🍀', fs:15, off:  5, rot:260 },
     { a:216, emoji:'🥀', fs:18, off: 12, rot:200 },
-    { a:228, emoji:'🌱🌿', fs:12, off: -3, rot:290 },
+    { a:228, emoji:'🌿', fs:12, off: -3, rot:290 },
     { a:239, emoji:'🌸', fs:21, off: 15, rot:185 },
     { a:251, emoji:'🍀', fs:14, off:  4, rot:320 },
     { a:263, emoji:'🌹', fs:19, off: 12, rot:195 },
-    { a:274, emoji:'🌱🌿', fs:12, off: -4, rot:350 },
+    { a:274, emoji:'🌿', fs:12, off: -4, rot:350 },
     { a:286, emoji:'🍀', fs:15, off:  5, rot: 10 },
     { a:298, emoji:'🌸', fs:20, off: 13, rot: 25 },
-    { a:309, emoji:'🌱🌿', fs:12, off: -2, rot: 40 },
+    { a:309, emoji:'🌿', fs:12, off: -2, rot: 40 },
     { a:320, emoji:'🥀', fs:17, off:  9, rot: 55 },
     { a:332, emoji:'🍀', fs:14, off:  3, rot: 70 },
     { a:344, emoji:'🌹', fs:20, off: 13, rot: -5 },
-    { a:356, emoji:'🌱🌿', fs:12, off: -3, rot: 10 },
+    { a:356, emoji:'🌿', fs:12, off: -3, rot: 10 },
   ];
 
   return (
@@ -844,17 +844,18 @@ export default function MagischeSpiegel() {
           {isDone && message && (
             <div style={{ position:'absolute', inset:0, pointerEvents:'none', overflow:'hidden',
               borderRadius:'50% 50% 47% 47%', zIndex:3 }}>
-              {PARTICLES.map(p => (
-                <div key={p.id} style={{
-                  position:'absolute', left:p.x+'%', top:p.y+'%',
-                  width:p.size, height:p.size, borderRadius:'50%',
-                  background:p.color, opacity:0,
-                  animation:'sparkle '+p.dur+'s ease-in-out '+p.delay+'s infinite',
-                  boxShadow:'0 0 '+p.size+'px '+p.color,
-                }}/>
-              ))}
-            </div>
-          )}
+              {PARTICLES.map((p, index) => (
+  <div key={p.id} style={{
+    position:'absolute', left:p.x+'%', top:p.y+'%',
+    fontSize: index === 0 ? '24px' : p.size + 'px', // De eerste is een grote fee
+    opacity:0,
+    animation:'sparkle '+p.dur+'s ease-in-out '+p.delay+'s infinite',
+    zIndex: 10
+  }}>
+    {index === 0 ? '🧚' : '🧚'} Dutch {/* De eerste is de fee, de rest zijn sterretjes */}
+  </div>
+))}
+
 
           <AnimatePresence>
             {step === STEP.LANG && <LangOverlay onSelect={selectLang}/>}

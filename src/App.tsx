@@ -1,12 +1,9 @@
 /**
- * Specchio delle Fate / Magische Spiegel — v11
- * Wijzigingen t.o.v. v10:
- *  - Gemini API (gemini-2.5-flash) voor boodschap EN TTS stem
- *  - Taalkeuze (IT / NL) als EERSTE stap vóór naam/datum
- *  - Subtitle: alleen ✦ ✦ ✦ (tekst verwijderd)
- *  - Alle UI-teksten en boodschappen tweetalig (IT of NL)
- *  - TTS via Gemini + browser SpeechSynthesis fallback
- *  - VITE_GEMINI_KEY env variabele
+ * Specchio delle Fate / Magische Spiegel — v11b
+ * Fixes t.o.v. v11:
+ *  - TTS afkap fix: 250ms marge na onended + src.start(0)
+ *  - Gemini model fallback: 2.5-flash → 2.0-flash (tekst + TTS)
+ *  - Fallback boodschap altijd aanwezig bij API storing
  */
 import { useState, useRef, useEffect } from 'react';
 import { Key } from 'lucide-react';
@@ -38,7 +35,7 @@ const LANG = {
     btnNextHint: 'Tocca qui quando tocca a un altro bambino',
     thinking: 'Lo specchio sta pensando... ✨',
     noKey: 'Nessuna chiave API impostata 🔑',
-    badDate: 'Non capisco la data. Di\' per es. 4 aprile o 15-04 ✨',
+    badDate: "Non capisco la data. Di' per es. 4 aprile o 15-04 ✨",
     noName: 'Dimmi prima come ti chiami! 🌟',
     notHeard: 'Non ho capito bene 🌟',
     micError: 'Il microfono non funziona in questo browser 🎤',
@@ -46,7 +43,7 @@ const LANG = {
     fallbackNote: '✦ Lo specchio parla dalla sua memoria magica ✦',
     bannerToday: '🎂 Oggi è il tuo grande giorno!',
     bannerSoon: (d) => `⏳ Ancora ${d} giorno${d===1?'':'i'} al tuo compleanno!`,
-    bannerPast: (d) => `🎉 Auguri! ${d} giorno${d===1?'':'i'} fa era il tuo giorno speciale!`,
+    bannerPast: (d) => `🎉 Auguri! ${Math.abs(d)} giorno${Math.abs(d)===1?'':'i'} fa era il tuo giorno speciale!`,
     factHeader: '✦ Nel tuo giorno di nascita, in passato ✦',
     keyTitle: '🔑 Chiave API',
     keyHint: 'Inserisci la chiave API Gemini.\nVerrà salvata solo su questo dispositivo.',
@@ -132,6 +129,7 @@ const STEP = { LANG: 'lang', NAME: 'name', DATE: 'date', DONE: 'done' };
 
 // ── Retry helper ──────────────────────────────────────────────────────────
 const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+
 async function fetchWithRetry(fn, maxAttempts = 3) {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -148,48 +146,57 @@ async function fetchWithRetry(fn, maxAttempts = 3) {
   }
 }
 
-// ── Gemini TTS ────────────────────────────────────────────────────────────
+// ── Gemini TTS met model-fallback + afkap fix ─────────────────────────────
 async function geminiTTS(text, apiKey, langCode = 'it') {
-  const voiceName = langCode === 'it' ? 'Aoede' : 'Aoede';
-  const resp = await fetch(
-    `${GEMINI_BASE}/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text }] }],
-        generationConfig: {
-          responseModalities: ['AUDIO'],
-          speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName } },
-          },
-        },
-      }),
+  const voiceName = 'Aoede';
+  let lastErr;
+  for (const model of ['gemini-2.5-flash-preview-tts', 'gemini-2.0-flash-preview-tts']) {
+    try {
+      const resp = await fetch(
+        `${GEMINI_BASE}/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text }] }],
+            generationConfig: {
+              responseModalities: ['AUDIO'],
+              speechConfig: {
+                voiceConfig: { prebuiltVoiceConfig: { voiceName } },
+              },
+            },
+          }),
+        }
+      );
+      if (!resp.ok) throw new Error('TTS ' + resp.status);
+      const data = await resp.json();
+      const b64 = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (!b64) throw new Error('No audio data');
+
+      const raw = atob(b64);
+      const bytes = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+      const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
+      const int16 = new Int16Array(bytes.buffer);
+      const float32 = new Float32Array(int16.length);
+      for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
+      const buf = ctx.createBuffer(1, float32.length, 24000);
+      buf.copyToChannel(float32, 0);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      src.connect(ctx.destination);
+      return new Promise((resolve, reject) => {
+        // 250ms marge zodat laatste lettergreep niet wordt afgeknipt
+        src.onended = () => { setTimeout(() => { ctx.close(); resolve(); }, 250); };
+        src.onerror = (e) => { ctx.close(); reject(e); };
+        src.start(0);
+      });
+    } catch (err) {
+      lastErr = err;
+      // probeer volgend TTS model
     }
-  );
-  if (!resp.ok) throw new Error('TTS API error: ' + resp.status);
-  const data = await resp.json();
-  const b64 = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-  if (!b64) throw new Error('No audio data');
-
-  // Decode base64 PCM → play via AudioContext
-  const raw = atob(b64);
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-
-  const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-  const int16 = new Int16Array(bytes.buffer);
-  const float32 = new Float32Array(int16.length);
-  for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
-  const buf = ctx.createBuffer(1, float32.length, 24000);
-  buf.copyToChannel(float32, 0);
-  const src = ctx.createBufferSource();
-  src.buffer = buf;
-  src.connect(ctx.destination);
-  return new Promise((resolve) => {
-    src.onended = () => { ctx.close(); resolve(); };
-    src.start();
-  });
+  }
+  throw lastErr;
 }
 
 // ── Browser TTS fallback ──────────────────────────────────────────────────
@@ -213,7 +220,6 @@ async function browserSpeak(text, langCode = 'it', onEnd = () => {}) {
   utt.rate = 0.88; utt.pitch = 1.1;
   utt.onend = onEnd; utt.onerror = onEnd;
   window.speechSynthesis.speak(utt);
-  setTimeout(() => { try { window.speechSynthesis.cancel(); } catch {} }, text.length * 70 + 3000);
 }
 
 async function speakText(text, langCode, apiKey, onStart = () => {}, onEnd = () => {}) {
@@ -224,7 +230,7 @@ async function speakText(text, langCode, apiKey, onStart = () => {}, onEnd = () 
       await geminiTTS(text, apiKey, langCode);
       onEnd();
       return;
-    } catch { /* fall through */ }
+    } catch { /* val terug op browser */ }
   }
   browserSpeak(text, langCode, onEnd);
 }
@@ -233,7 +239,7 @@ async function speakAll(boodschap, facts, langCode, apiKey, factKey, onStart, on
   const feitjesTekst = facts.length > 0
     ? (langCode === 'it'
         ? 'E sapevi che nel tuo giorno di nascita sono successe cose speciali? '
-          + facts.map(f => `Nell'anno ${f.year}: ${f.it || f.nl}`).join('. ') + '.'
+          + facts.map(f => `Nell\'anno ${f.year}: ${f.it || f.nl}`).join('. ') + '.'
         : 'En wist je dat er op jouw verjaardag ook bijzondere dingen zijn gebeurd? '
           + facts.map(f => `In het jaar ${f.year}: ${f.nl || f.it}`).join('. ') + '.')
     : '';
@@ -243,9 +249,10 @@ async function speakAll(boodschap, facts, langCode, apiKey, factKey, onStart, on
 
 // ── Fallback boodschappen ─────────────────────────────────────────────────
 function buildFallback(name, day, month, daysUntil, lang) {
-  const L = LANG[lang];
-  const mesi = { it: ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'],
-                  nl: ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'] };
+  const mesi = {
+    it: ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'],
+    nl: ['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'],
+  };
   const mese = mesi[lang][month - 1];
 
   let begroeting = '';
@@ -281,7 +288,7 @@ function buildFallback(name, day, month, daysUntil, lang) {
       { year: 1955, it: 'Aprì il primo Disneyland: un parco magico pieno di sogni.', nl: 'Opende het eerste Disneyland zijn poorten, een echt sprookjespark vol dromen.' },
     ],
     lente: [
-      { year: 1937, it: 'Biancaneve fu il primo film d\'animazione lungo della storia.', nl: 'Was Sneeuwwitje de eerste lange animatiefilm ooit.' },
+      { year: 1937, it: "Biancaneve fu il primo film d'animazione lungo della storia.", nl: 'Was Sneeuwwitje de eerste lange animatiefilm ooit.' },
       { year: 1989, it: 'La Sirenetta nuotò per la prima volta sullo schermo grande.', nl: 'Zwom de Kleine Zeemeermin voor het eerst op het witte doek.' },
     ],
     zomer: [
@@ -289,7 +296,7 @@ function buildFallback(name, day, month, daysUntil, lang) {
       { year: 1997, it: 'Harry Potter salì per la prima volta sulla sua scopa e volò verso Hogwarts.', nl: 'Besteeg Harry Potter voor het eerst zijn bezem en vloog naar Zweinstein.' },
     ],
     herfst: [
-      { year: 1928, it: 'Topolino fece il suo primo squittio: l\'inizio di un mondo magico di cartoni animati.', nl: 'Piepte Mickey Mouse voor het eerst, het begin van een magische wereld vol tekenfilms.' },
+      { year: 1928, it: "Topolino fece il suo primo squittio: l'inizio di un mondo magico di cartoni animati.", nl: 'Piepte Mickey Mouse voor het eerst, het begin van een magische wereld vol tekenfilms.' },
       { year: 1952, it: 'Pippi Calzelunghe apparve per la prima volta in televisione.', nl: 'Verscheen Pippi Langkous voor het eerst op televisie.' },
     ],
   };
@@ -297,7 +304,7 @@ function buildFallback(name, day, month, daysUntil, lang) {
   return { [lang]: testo, facts: feitjes[seizoen], _isFallback: true };
 }
 
-// ── OrnateFrame SVG (ongewijzigd) ─────────────────────────────────────────
+// ── OrnateFrame SVG ───────────────────────────────────────────────────────
 function ptOnEllipse(cx, cy, rx, ry, angleDeg) {
   const a = (angleDeg - 90) * Math.PI / 180;
   return [cx + rx * Math.cos(a), cy + ry * Math.sin(a)];
@@ -486,8 +493,7 @@ function SetupOverlay({ step, lang, name, setName, birthInput, setBirthInput,
       <div style={{ fontSize:26 }}>{isName ? L.emoji.name : L.emoji.date}</div>
       <p style={{ color:'#f5e642', fontSize:12, textAlign:'center', margin:0,
         lineHeight:1.55, fontFamily:"'IM Fell English', serif",
-        textShadow:'0 0 10px rgba(245,230,66,0.48)',
-        whiteSpace:'pre-line' }}>
+        textShadow:'0 0 10px rgba(245,230,66,0.48)', whiteSpace:'pre-line' }}>
         {isName ? L.qName : L.qDate(name)}
       </p>
       <input
@@ -604,7 +610,7 @@ function parseBirthDate(input) {
     novembre:11, nov:11, november:11,
     dicembre:12, dic:12, december:12, dec:12,
   };
-  const mMatch = raw.match(/\b(gennaio|gen|febbraio|feb|marzo|mar|aprile|apr|maggio|giugno|giu|luglio|lug|agosto|ago|settembre|set|ottobre|ott|novembre|nov|dicembre|dic|january|february|march|april|may|june|july|august|september|sept?|october|nov|december|januari|februari|maart|juni|juli|augustus|oktober)\b/);
+  const mMatch = raw.match(/\b(gennaio|gen|febbraio|feb|marzo|mar|aprile|apr|maggio|giugno|giu|luglio|lug|agosto|ago|settembre|set|ottobre|ott|novembre|nov|dicembre|dic|january|february|march|april|may|june|july|august|september|sept?|october|december|januari|februari|maart|juni|juli|augustus|oktober)\b/);
   if (mMatch) {
     const month = MONTHS[mMatch[1]];
     const nums = raw.match(/\d+/g)?.map(Number) || [];
@@ -632,26 +638,26 @@ function computeDaysUntil(day, month) {
 
 // ── Hoofd component ───────────────────────────────────────────────────────
 export default function MagischeSpiegel() {
-  const [step, setStep]               = useState(STEP.LANG);
-  const [lang, setLang]               = useState('it');
-  const [name, setName]               = useState('');
-  const [birthInput, setBirthInput]   = useState('');
-  const [message, setMessage]         = useState(null);
-  const [status, setStatus]           = useState('');
-  const [isListening, setIsListening] = useState(false);
+  const [step, setStep]                 = useState(STEP.LANG);
+  const [lang, setLang]                 = useState('it');
+  const [name, setName]                 = useState('');
+  const [birthInput, setBirthInput]     = useState('');
+  const [message, setMessage]           = useState(null);
+  const [status, setStatus]             = useState('');
+  const [isListening, setIsListening]   = useState(false);
   const [listenTarget, setListenTarget] = useState(null);
-  const [isThinking, setIsThinking]   = useState(false);
-  const [isSpeaking, setIsSpeaking]   = useState(false);
-  const [daysInfo, setDaysInfo]       = useState(null);
+  const [isThinking, setIsThinking]     = useState(false);
+  const [isSpeaking, setIsSpeaking]     = useState(false);
+  const [daysInfo, setDaysInfo]         = useState(null);
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [apiKey] = useState(() => {
     if (ENV_KEY) return ENV_KEY;
     try { return localStorage.getItem('magic_mirror_gemini_key') || ''; } catch { return ''; }
   });
 
-  const videoRef = useRef(null);
+  const videoRef  = useRef(null);
   const streamRef = useRef(null);
-  const recRef = useRef(null);
+  const recRef    = useRef(null);
 
   // Camera
   useEffect(() => {
@@ -680,23 +686,18 @@ export default function MagischeSpiegel() {
 
   const L = LANG[lang];
 
-  const selectLang = (code) => {
-    setLang(code);
-    setStep(STEP.NAME);
-  };
+  const selectLang = (code) => { setLang(code); setStep(STEP.NAME); };
 
   const confirmName = () => {
     if (!name.trim()) { setStatus(L.noName); return; }
-    setStatus('');
-    setStep(STEP.DATE);
+    setStatus(''); setStep(STEP.DATE);
   };
 
   const confirmDate = () => {
     const parsed = parseBirthDate(birthInput);
     if (!parsed) { setStatus(L.badDate); return; }
     const days = computeDaysUntil(parsed.day, parsed.month);
-    setDaysInfo(days);
-    setStatus('');
+    setDaysInfo(days); setStatus('');
     setStep(STEP.DONE);
     fetchMessage(name, parsed.day, parsed.month, days);
   };
@@ -719,43 +720,44 @@ export default function MagischeSpiegel() {
     rec.start();
   };
 
-  // ── Gemini tekst API ──────────────────────────────────────────────────
+  // ── Gemini tekst API met model-fallback ───────────────────────────────
   const fetchMessage = async (n, day, month, days) => {
     if (!apiKey) { setStatus(L.noKey); return; }
-    setIsThinking(true);
-    setMessage(null);
-    setStatus(L.thinking);
+    setIsThinking(true); setMessage(null); setStatus(L.thinking);
 
     try {
-      const resp = await fetchWithRetry(() =>
-        fetch(`${GEMINI_BASE}/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: L.buildPrompt(n, day, month, days) }] }],
-            systemInstruction: { parts: [{ text: L.promptSystem }] },
-            generationConfig: { temperature: 0.9, maxOutputTokens: 800 },
-          }),
-        }).then(r => r.json())
-      );
-
-      if (resp.error) throw new Error(resp.error.message || 'API fout');
+      let resp, lastTextErr;
+      for (const model of ['gemini-2.5-flash', 'gemini-2.0-flash']) {
+        try {
+          resp = await fetchWithRetry(() =>
+            fetch(`${GEMINI_BASE}/models/${model}:generateContent?key=${apiKey}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: L.buildPrompt(n, day, month, days) }] }],
+                systemInstruction: { parts: [{ text: L.promptSystem }] },
+                generationConfig: { temperature: 0.9, maxOutputTokens: 800 },
+              }),
+            }).then(r => r.json())
+          );
+          if (resp.error) throw new Error(resp.error.message || 'API fout');
+          break;
+        } catch (err) { lastTextErr = err; }
+      }
+      if (!resp || resp.error) throw lastTextErr || new Error('Alle modellen faalden');
 
       const raw = resp.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
       const data = JSON.parse(raw.replace(/```json|```/g, '').trim());
-      setMessage(data);
-      setStatus('');
-      setIsThinking(false);
+      setMessage(data); setStatus(''); setIsThinking(false);
       const tekst = data[lang] || data.nl || data.it || '';
       if (tekst) {
         speakAll(tekst, data.facts || [], lang, apiKey, lang,
           () => setIsSpeaking(true), () => setIsSpeaking(false));
       }
-    } catch (err) {
+    } catch {
       setIsThinking(false);
       const fallback = buildFallback(n, day, month, days, lang);
-      setMessage(fallback);
-      setStatus('✨');
+      setMessage(fallback); setStatus('✨');
       setTimeout(() => setStatus(''), 2500);
       const tekst = fallback[lang] || '';
       speakAll(tekst, fallback.facts || [], lang, apiKey, lang,
@@ -917,7 +919,7 @@ export default function MagischeSpiegel() {
         </motion.div>
       )}
 
-      {/* API sleutel knop — alleen tonen als geen env key */}
+      {/* API sleutel knop */}
       {!ENV_KEY && (
         <button onClick={() => setShowKeyModal(true)} style={S.btnKey}>
           <Key size={10} style={{ marginRight:4 }}/>
@@ -1011,8 +1013,7 @@ const S = {
     `,
   },
   header: {
-    width:'100%', maxWidth:480,
-    padding:'6px 16px 3px',
+    width:'100%', maxWidth:480, padding:'6px 16px 3px',
     display:'flex', flexDirection:'column', alignItems:'center',
     position:'relative', zIndex:5,
   },

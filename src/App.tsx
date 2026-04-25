@@ -317,14 +317,14 @@ function OrnateFrame({ W = 270, H = 330 }) {
   const kransPunten = [
     { a:  0, emoji:'🌹', fs:22, off: 14, rot:  0 },
     { a: 14, emoji:'🍀', fs:15, off:  4, rot: 20 },
-    { a: 25, emoji:'🌱🌿', fs:13, off: -2, rot: 35 },
+    { a: 25, emoji:'🌿', fs:13, off: -2, rot: 35 },
     { a: 37, emoji:'🥀', fs:17, off:  8, rot: 50 },
     { a: 50, emoji:'🍀', fs:14, off:  2, rot: 65 },
     { a: 63, emoji:'🌸', fs:20, off: 12, rot: 80 },
-    { a: 76, emoji:'🌱🌿', fs:12, off: -4, rot: 95 },
+    { a: 76, emoji:'🌿', fs:12, off: -4, rot: 95 },
     { a: 87, emoji:'🍀', fs:15, off:  5, rot:110 },
     { a: 99, emoji:'🌹', fs:19, off: 11, rot:125 },
-    { a:111, emoji:'🌱🌿', fs:12, off: -3, rot:140 },
+    { a:111, emoji:'🌿', fs:12, off: -3, rot:140 },
     { a:122, emoji:'🍀', fs:16, off:  6, rot:155 },
     { a:134, emoji:'🥀', fs:18, off: 13, rot:170 },
     { a:146, emoji:'🌿', fs:13, off: -2, rot:185 },
@@ -852,9 +852,10 @@ export default function MagischeSpiegel() {
     animation:'sparkle '+p.dur+'s ease-in-out '+p.delay+'s infinite',
     zIndex: 10
   }}>
-    {index === 0 ? '🧚' : '🧚'} Dutch {/* De eerste is de fee, de rest zijn sterretjes */}
+    {index === 0 ? '🧚' : '✨'} Dutch {/* De eerste is de fee, de rest zijn sterretjes */}
   </div>
 ))}
+
 
 
           <AnimatePresence>

@@ -85,7 +85,7 @@ Rispondi SOLO come JSON senza markdown:
     dateHint: 'Bijv: 4 april · april 4 · 15-04',
     btnNext: 'Verder ✨',
     btnShow: 'Toon mijn boodschap 🪄',
-    btnNextChild: '✨ Volgend kind ✨',
+    btnNextChild: '✨ Volgende Graag ✨',
     btnNextHint: 'Tik hier als een ander kind aan de beurt is',
     thinking: 'De spiegel denkt na... ✨',
     noKey: 'Geen API sleutel ingesteld 🔑',

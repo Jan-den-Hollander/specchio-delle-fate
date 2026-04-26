@@ -51,7 +51,7 @@ const LANG = {
     keyCancel: 'Annulla',
     keySave: 'Salva',
     keyBtn: (has) => has ? 'Chiave API ✓' : 'Imposta chiave API',
-    emoji: { name: '🧚🪄', date: '🎂' },
+    emoji: { name: '🧚', date: '🎂' },
     promptSystem: `Sei lo Specchio delle Fate in un bosco incantato. Parla in modo caldo, gioioso e adatto ai bambini. Rispondi SOLO in JSON senza markdown.`,
     buildPrompt: (name, day, month, daysUntil) => {
       const mesi = ['gennaio','febbraio','marzo','aprile','maggio','giugno',
@@ -105,7 +105,7 @@ Rispondi SOLO come JSON senza markdown:
     keyCancel: 'Annuleer',
     keySave: 'Opslaan',
     keyBtn: (has) => has ? 'API sleutel ✓' : 'API sleutel instellen',
-    emoji: { name: '🧚🪄', date: '🎂' },
+    emoji: { name: '🧚', date: '🎂' },
     promptSystem: `Je bent de Magische Spiegel in een betoverd sprookjesbos. Spreek warm, vrolijk en kindvriendelijk. Antwoord ALLEEN als JSON zonder markdown.`,
     buildPrompt: (name, day, month, daysUntil) => {
       const maanden = ['januari','februari','maart','april','mei','juni',
@@ -317,35 +317,35 @@ function OrnateFrame({ W = 270, H = 330 }) {
   const kransPunten = [
     { a:  0, emoji:'🌹', fs:22, off: 14, rot:  0 },
     { a: 14, emoji:'🍀', fs:15, off:  4, rot: 20 },
-    { a: 25, emoji:'🌱', fs:13, off: -2, rot: 35 },
+    { a: 25, emoji:'🌿', fs:13, off: -2, rot: 35 },
     { a: 37, emoji:'🥀', fs:17, off:  8, rot: 50 },
     { a: 50, emoji:'🍀', fs:14, off:  2, rot: 65 },
     { a: 63, emoji:'🌸', fs:20, off: 12, rot: 80 },
-    { a: 76, emoji:'🌱', fs:12, off: -4, rot: 95 },
+    { a: 76, emoji:'🌿', fs:12, off: -4, rot: 95 },
     { a: 87, emoji:'🍀', fs:15, off:  5, rot:110 },
     { a: 99, emoji:'🌹', fs:19, off: 11, rot:125 },
-    { a:111, emoji:'🌱', fs:12, off: -3, rot:140 },
+    { a:111, emoji:'🌿', fs:12, off: -3, rot:140 },
     { a:122, emoji:'🍀', fs:16, off:  6, rot:155 },
     { a:134, emoji:'🥀', fs:18, off: 13, rot:170 },
-    { a:146, emoji:'🌱', fs:13, off: -2, rot:185 },
+    { a:146, emoji:'🌿', fs:13, off: -2, rot:185 },
     { a:157, emoji:'🌸', fs:20, off: 14, rot:200 },
     { a:169, emoji:'🍀', fs:14, off:  3, rot:215 },
     { a:180, emoji:'🌹', fs:21, off: 14, rot:180 },
-    { a:192, emoji:'🌱', fs:12, off: -4, rot:245 },
+    { a:192, emoji:'🌿', fs:12, off: -4, rot:245 },
     { a:204, emoji:'🍀', fs:15, off:  5, rot:260 },
     { a:216, emoji:'🥀', fs:18, off: 12, rot:200 },
-    { a:228, emoji:'🌱', fs:12, off: -3, rot:290 },
+    { a:228, emoji:'🌿', fs:12, off: -3, rot:290 },
     { a:239, emoji:'🌸', fs:21, off: 15, rot:185 },
     { a:251, emoji:'🍀', fs:14, off:  4, rot:320 },
     { a:263, emoji:'🌹', fs:19, off: 12, rot:195 },
-    { a:274, emoji:'🌱', fs:12, off: -4, rot:350 },
+    { a:274, emoji:'🌿', fs:12, off: -4, rot:350 },
     { a:286, emoji:'🍀', fs:15, off:  5, rot: 10 },
     { a:298, emoji:'🌸', fs:20, off: 13, rot: 25 },
-    { a:309, emoji:'🌱', fs:12, off: -2, rot: 40 },
+    { a:309, emoji:'🌿', fs:12, off: -2, rot: 40 },
     { a:320, emoji:'🥀', fs:17, off:  9, rot: 55 },
     { a:332, emoji:'🍀', fs:14, off:  3, rot: 70 },
     { a:344, emoji:'🌹', fs:20, off: 13, rot: -5 },
-    { a:356, emoji:'🌱', fs:12, off: -3, rot: 10 },
+    { a:356, emoji:'🌿', fs:12, off: -3, rot: 10 },
   ];
 
   return (
@@ -396,7 +396,7 @@ function OrnateFrame({ W = 270, H = 330 }) {
       <ellipse cx={cx} cy={cy} rx={rx-8}  ry={ry-8}  fill="none" stroke="url(#gG2)" strokeWidth="1.6" opacity="0.6"/>
       <ellipse cx={cx} cy={cy} rx={rx-13} ry={ry-13} fill="none" stroke="#f5e642"   strokeWidth="0.5" opacity="0.18"/>
 
-      {kransPunten.filter(p => ['🌱','🍀'].includes(p.emoji)).map((p, i) => {
+      {kransPunten.filter(p => ['🌿','🍀'].includes(p.emoji)).map((p, i) => {
         const [px, py] = ptOnEllipse(cx, cy, rx + p.off, ry + p.off, p.a);
         return <text key={'g'+i} x={px} y={py} fontSize={p.fs} textAnchor="middle" dominantBaseline="middle"
           transform={'rotate('+p.rot+','+px+','+py+')'} filter="url(#emojiShadow)" style={{ userSelect:'none' }}>{p.emoji}</text>;
@@ -433,6 +433,7 @@ const PARTICLES = Array.from({ length: 10 }, (_, i) => ({
   id: i, x: 10+Math.random()*80, y: 10+Math.random()*80,
   size: 4+Math.random()*7, delay: Math.random()*3, dur: 2+Math.random()*2,
   color: ['#f5e642','#fff8c0','#ffb347','#ff9de2','#a8edea'][i%5],
+  isFee: i === 4,
 }));
 
 // ── Taalkeuze overlay ─────────────────────────────────────────────────────
@@ -844,19 +845,29 @@ export default function MagischeSpiegel() {
           {isDone && message && (
             <div style={{ position:'absolute', inset:0, pointerEvents:'none', overflow:'hidden',
               borderRadius:'50% 50% 47% 47%', zIndex:3 }}>
-              {PARTICLES.map((p, index) => (
-  <div key={p.id} style={{
-    position:'absolute', left:p.x+'%', top:p.y+'%',
-    fontSize: index === 0 ? '24px' : p.size + 'px', // De eerste is een grote fee
-    opacity:0,
-    animation:'sparkle '+p.dur+'s ease-in-out '+p.delay+'s infinite',
-    zIndex: 10
-  }}>
-    {index === 0 ? '🧚' : '✨'} Dutch {/* De eerste is de fee, de rest zijn sterretjes */}
-  </div>
-))}
-
-
+              {PARTICLES.map(p => (
+                p.isFee ? (
+                  <div key={p.id} style={{
+                    position:'absolute', left:p.x+'%', top:p.y+'%',
+                    transform:'translate(-50%,-50%)',
+                    opacity:0,
+                    animation:'sparkle '+p.dur+'s ease-in-out '+p.delay+'s infinite',
+                    fontSize:22, lineHeight:1,
+                    filter:'drop-shadow(0 0 6px #f5e642) drop-shadow(0 0 12px rgba(245,230,66,0.6))',
+                    pointerEvents:'none', userSelect:'none',
+                  }}>🧚</div>
+                ) : (
+                  <div key={p.id} style={{
+                    position:'absolute', left:p.x+'%', top:p.y+'%',
+                    width:p.size, height:p.size, borderRadius:'50%',
+                    background:p.color, opacity:0,
+                    animation:'sparkle '+p.dur+'s ease-in-out '+p.delay+'s infinite',
+                    boxShadow:'0 0 '+p.size+'px '+p.color,
+                  }}/>
+                )
+              ))}
+            </div>
+          )}
 
           <AnimatePresence>
             {step === STEP.LANG && <LangOverlay onSelect={selectLang}/>}

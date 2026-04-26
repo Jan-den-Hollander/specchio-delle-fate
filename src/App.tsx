@@ -31,7 +31,7 @@ const LANG = {
     dateHint: 'Es: 4 aprile · aprile 4 · 15-04',
     btnNext: 'Avanti ✨',
     btnShow: 'Mostra il mio messaggio 🪄',
-    btnNextChild: '✨ Prossimo bambino ✨',
+    btnNextChild: '✨ Ora tocca al prossimo ✨',
     btnNextHint: 'Tocca qui quando tocca a un altro bambino',
     thinking: 'Lo specchio sta pensando... ✨',
     noKey: 'Nessuna chiave API impostata 🔑',
